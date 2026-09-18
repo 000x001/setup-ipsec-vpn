@@ -1,12 +1,12 @@
 #!/bin/sh
 #
 # Script to update Libreswan on Ubuntu, Debian, CentOS/RHEL, Rocky Linux,
-# AlmaLinux, Oracle Linux, Amazon Linux 2 and Alpine Linux
+# AlmaLinux, Oracle Linux and Alpine Linux
 #
 # The latest version of this script is available at:
 # https://github.com/hwdsl2/setup-ipsec-vpn
 #
-# Copyright (C) 2021-2023 Lin Song <linsongui@gmail.com>
+# Copyright (C) 2021-2026 Lin Song <linsongui@gmail.com>
 #
 # This work is licensed under the Creative Commons Attribution-ShareAlike 3.0
 # Unported License: http://creativecommons.org/licenses/by-sa/3.0/
@@ -51,18 +51,21 @@ check_os() {
     elif grep -q "release 8" "$rh_file"; then
       os_ver=8
       grep -qi stream "$rh_file" && os_ver=8s
-      if [ "$os_type$os_ver" = "centos8" ]; then
-        exiterr "CentOS Linux 8 is EOL and not supported."
-      fi
     elif grep -q "release 9" "$rh_file"; then
       os_ver=9
       grep -qi stream "$rh_file" && os_ver=9s
+    elif grep -q "release 10" "$rh_file"; then
+      os_ver=10
+      grep -qi stream "$rh_file" && os_ver=10s
     else
-      exiterr "This script only supports CentOS/RHEL 7-9."
+      exiterr "This script only supports CentOS/RHEL 7-10."
+    fi
+    if [ "$os_type" = "centos" ] \
+      && { [ "$os_ver" = 7 ] || [ "$os_ver" = 8 ] || [ "$os_ver" = 8s ]; }; then
+      exiterr "CentOS Linux $os_ver is EOL and not supported."
     fi
   elif grep -qs "Amazon Linux release 2 " /etc/system-release; then
-    os_type=amzn
-    os_ver=2
+    exiterr "Amazon Linux 2 has reached end of support and is no longer supported by this project. Please migrate to a currently supported operating system."
   else
     os_type=$(lsb_release -si 2>/dev/null)
     [ -z "$os_type" ] && [ -f /etc/os-release ] && os_type=$(. /etc/os-release && printf '%s' "$ID")
@@ -70,11 +73,8 @@ check_os() {
       [Uu]buntu)
         os_type=ubuntu
         ;;
-      [Dd]ebian|[Kk]ali)
+      [Dd]ebian|[Kk]ali|[Rr]aspbian)
         os_type=debian
-        ;;
-      [Rr]aspbian)
-        os_type=raspbian
         ;;
       [Aa]lpine)
         os_type=alpine
@@ -83,20 +83,20 @@ check_os() {
 cat 1>&2 <<'EOF'
 Error: This script only supports one of the following OS:
        Ubuntu, Debian, CentOS/RHEL, Rocky Linux, AlmaLinux,
-       Oracle Linux, Amazon Linux 2 or Alpine Linux
+       Oracle Linux or Alpine Linux
 EOF
         exit 1
         ;;
     esac
-    if [ "$os_type" = "alpine" ]; then
-      os_ver=$(. /etc/os-release && printf '%s' "$VERSION_ID" | cut -d '.' -f 1,2)
-      if [ "$os_ver" != "3.17" ] && [ "$os_ver" != "3.18" ]; then
-        exiterr "This script only supports Alpine Linux 3.17/3.18."
-      fi
-    else
+    if [ "$os_type" != "alpine" ]; then
       os_ver=$(sed 's/\..*//' /etc/debian_version | tr -dc 'A-Za-z0-9')
-      if [ "$os_ver" = 8 ] || [ "$os_ver" = "jessiesid" ]; then
-        exiterr "Debian 8 or Ubuntu < 16.04 is not supported."
+      if [ "$os_ver" = 8 ] || [ "$os_ver" = 9 ] || [ "$os_ver" = "stretchsid" ] \
+        || [ "$os_ver" = "bustersid" ] || [ -z "$os_ver" ]; then
+cat 1>&2 <<EOF
+Error: This script requires Debian >= 10 or Ubuntu >= 20.04.
+       This version of Ubuntu/Debian is too old and not supported.
+EOF
+        exit 1
       fi
     fi
   fi
@@ -115,7 +115,7 @@ EOF
 
 install_pkgs() {
   if ! command -v wget >/dev/null 2>&1; then
-    if [ "$os_type" = "ubuntu" ] || [ "$os_type" = "debian" ] || [ "$os_type" = "raspbian" ]; then
+    if [ "$os_type" = "ubuntu" ] || [ "$os_type" = "debian" ]; then
       export DEBIAN_FRONTEND=noninteractive
       (
         set -x
@@ -147,8 +147,6 @@ get_setup_url() {
   if [ "$os_type" = "centos" ] || [ "$os_type" = "rhel" ] || [ "$os_type" = "rocky" ] \
     || [ "$os_type" = "alma" ] || [ "$os_type" = "ol" ]; then
     sh_file="vpnupgrade_centos.sh"
-  elif [ "$os_type" = "amzn" ]; then
-    sh_file="vpnupgrade_amzn.sh"
   elif [ "$os_type" = "alpine" ]; then
     sh_file="vpnupgrade_alpine.sh"
   fi

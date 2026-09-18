@@ -14,11 +14,11 @@
 
 ## 导言
 
-现代操作系统支持 IKEv2 协议标准。因特网密钥交换（英语：Internet Key Exchange，简称 IKE 或 IKEv2）是一种网络协议，归属于 IPsec 协议族之下，用以创建安全关联 (Security Association, SA)。与 IKE 版本 1 相比较，IKEv2 的 [功能改进](https://en.wikipedia.org/wiki/Internet_Key_Exchange#Improvements_with_IKEv2) 包括比如通过 MOBIKE 实现 Standard Mobility 支持，以及更高的可靠性。
+现代操作系统支持 IKEv2 协议标准。因特网密钥交换（英语：Internet Key Exchange，简称 IKE 或 IKEv2）是一种网络协议，归属于 IPsec 协议族之下，用以创建安全关联 (Security Association, SA)。与 IKE 版本 1 相比较，IKEv2 的[功能改进](https://en.wikipedia.org/wiki/Internet_Key_Exchange#Improvements_with_IKEv2)包括比如通过 MOBIKE 实现 Standard Mobility 支持，以及更高的可靠性。
 
 Libreswan 支持通过使用 RSA 签名算法的 X.509 Machine Certificates 来对 IKEv2 客户端进行身份验证。该方法无需 IPsec PSK, 用户名或密码。它可以用于 Windows, macOS, iOS, Android, Chrome OS, Linux 和 RouterOS。
 
-默认情况下，运行 VPN 安装脚本时会自动配置 IKEv2。如果你想了解有关配置 IKEv2 的更多信息，请参见 [使用辅助脚本配置 IKEv2](#使用辅助脚本配置-ikev2)。Docker 用户请看 [配置并使用 IKEv2 VPN](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/README-zh.md#配置并使用-ikev2-vpn)。
+默认情况下，运行 VPN 安装脚本时会自动配置 IKEv2。如果你想了解有关配置 IKEv2 的更多信息，请参见[使用辅助脚本配置 IKEv2](#使用辅助脚本配置-ikev2)。Docker 用户请看[配置并使用 IKEv2 VPN](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/README-zh.md#配置并使用-ikev2-vpn)。
 
 ## 配置 IKEv2 VPN 客户端
 
@@ -30,17 +30,15 @@ Libreswan 支持通过使用 RSA 签名算法的 X.509 Machine Certificates 来�
 * [Android](#android)
 * [Chrome OS (Chromebook)](#chrome-os)
 * [Linux](#linux)
-* [Mikrotik RouterOS](#routeros)
+* [MikroTik RouterOS](#routeros)
 
 <details>
 <summary>
 了解如何更改 IKEv2 服务器地址。
 </summary>
 
-在某些情况下，你可能需要更改 IKEv2 服务器地址，例如切换为使用域名，或者在服务器的 IP 更改之后。要了解更多信息，参见 [这一小节](#更改-ikev2-服务器地址)。
+在某些情况下，你可能需要更改 IKEv2 服务器地址，例如切换为使用域名，或者在服务器的 IP 更改之后。要了解更多信息，参见[这一小节](#更改-ikev2-服务器地址)。
 </details>
-
-**阅读 [:book: VPN book](https://ko-fi.com/post/Support-this-project-and-get-access-to-supporter-o-X8X5FVFZC) 以访问 [额外内容](https://ko-fi.com/post/Support-this-project-and-get-access-to-supporter-o-X8X5FVFZC)。**
 
 ### Windows 7, 8, 10 和 11
 
@@ -48,26 +46,28 @@ Libreswan 支持通过使用 RSA 签名算法的 X.509 Machine Certificates 来�
 
 [**屏幕录影：** 在 Windows 上自动导入 IKEv2 配置](https://ko-fi.com/post/IKEv2-Auto-Import-Configuration-on-Windows-8-10-a-K3K1DQCHW)
 
-**Windows 8, 10 和 11** 用户可以自动导入 IKEv2 配置：
+**Windows 8, 10 和 11+** 用户可以自动导入 IKEv2 配置：
 
 1. 将生成的 `.p12` 文件安全地传送到你的计算机。
 1. 右键单击 [ikev2_config_import.cmd](https://github.com/hwdsl2/vpn-extras/releases/latest/download/ikev2_config_import.cmd) 并保存这个辅助脚本到与 `.p12` 文件 **相同的文件夹**。
 1. 右键单击保存的脚本，选择 **属性**。单击对话框下方的 **解除锁定**，然后单击 **确定**。
 1. 右键单击保存的脚本，选择 **以管理员身份运行** 并按提示操作。
 
-要连接到 VPN：单击系统托盘中的无线/网络图标，选择新的 VPN 连接，然后单击 **连接**。连接成功后，你可以到 [这里](https://www.ipchicken.com) 检测你的 IP 地址，应该显示为`你的 VPN 服务器 IP`。
+要连接到 VPN：单击系统托盘中的无线/网络图标，选择新的 VPN 连接，然后单击 **连接**。连接成功后，你可以到[这里](https://www.ipchicken.com)检测你的 IP 地址，应该显示为`你的 VPN 服务器 IP`。
 
-如果在连接过程中遇到错误，请参见 [故障排除](#ikev2-故障排除)。
+如果在连接过程中遇到错误，请参见[故障排除](#ikev2-故障排除)。
+
+**注：** 如果你重新安装了 VPN 服务器，你可能需要先删除现有的 IKEv2 客户端和 CA 证书，然后按照上述步骤导入新的 `.p12` 文件。这有助于确保 Windows 在连接到 VPN 时使用正确的客户端证书。有关详细信息，请参阅下面的 "删除 IKEv2 VPN 连接"。
 
 #### 手动导入配置
 
 [[支持者] **屏幕录影：** 在 Windows 上手动导入 IKEv2 配置](https://ko-fi.com/post/Support-this-project-and-get-access-to-supporter-o-X8X5FVFZC)
 
-或者，**Windows 7, 8, 10 和 11** 用户可以手动导入 IKEv2 配置：
+或者，**Windows 7, 8, 10 和 11+** 用户可以手动导入 IKEv2 配置：
 
 1. 将生成的 `.p12` 文件安全地传送到你的计算机，然后导入到证书存储。
 
-   要导入 `.p12` 文件，打开 [提升权限命令提示符](http://www.cnblogs.com/xxcanghai/p/4610054.html) 并运行以下命令：
+   要导入 `.p12` 文件，打开[提升权限命令提示符](http://www.cnblogs.com/xxcanghai/p/4610054.html)并运行以下命令：
 
    ```console
    # 导入 .p12 文件（换成你自己的值）
@@ -76,11 +76,11 @@ Libreswan 支持通过使用 RSA 签名算法的 X.509 Machine Certificates 来�
 
    **注：** 如果客户端配置文件没有密码，请按回车键继续，或者在手动导入 `.p12` 文件时保持密码字段空白。
 
-   或者，你也可以 [手动导入 .p12 文件](https://wiki.strongswan.org/projects/strongswan/wiki/Win7Certs/9)。在导入证书后，确保将客户端证书放在 "个人 -> 证书" 目录中，并且将 CA 证书放在 "受信任的根证书颁发机构 -> 证书" 目录中。
+   或者，你也可以[手动导入 .p12 文件](https://wiki.strongswan.org/projects/strongswan/wiki/Win7Certs/9)。在导入证书后，确保将客户端证书放在 "个人 -> 证书" 目录中，并且将 CA 证书放在 "受信任的根证书颁发机构 -> 证书" 目录中。
 
 1. 在 Windows 计算机上添加一个新的 IKEv2 VPN 连接。
 
-   对于 **Windows 8, 10 和 11**，推荐从命令提示符运行以下命令创建 VPN 连接，以达到更佳的安全性和性能。
+   对于 **Windows 8, 10 和 11+**，推荐从命令提示符运行以下命令创建 VPN 连接，以达到更佳的安全性和性能。
 
    ```console
    # 创建 VPN 连接（将服务器地址换成你自己的值）
@@ -94,13 +94,13 @@ Libreswan 支持通过使用 RSA 签名算法的 X.509 Machine Certificates 来�
      -DHGroup Group14 -PassThru -Force^"
    ```
 
-   **Windows 7** 不支持这些命令，你可以 [手动创建 VPN 连接](https://wiki.strongswan.org/projects/strongswan/wiki/Win7Config/8)。
+   **Windows 7** 不支持这些命令，你可以[手动创建 VPN 连接](https://wiki.strongswan.org/projects/strongswan/wiki/Win7Config/8)。
 
    **注：** 你输入的服务器地址必须与 IKEv2 辅助脚本输出中的服务器地址 **完全一致**。例如，如果你在配置 IKEv2 时指定了服务器的域名，则必须在 **Internet地址** 字段中输入该域名。
 
 1. **此步骤为必须，如果你手动创建了 VPN 连接。**
 
-   为 IKEv2 启用更强的加密算法，通过修改一次注册表来实现。请下载并导入下面的 `.reg` 文件，或者打开提升权限命令提示符并运行以下命令。更多信息请看 [这里](https://docs.strongswan.org/docs/5.9/interop/windowsClients.html)。
+   为 IKEv2 启用更强的加密算法，通过修改一次注册表来实现。请下载并导入下面的 `.reg` 文件，或者打开提升权限命令提示符并运行以下命令。更多信息请看[这里](https://docs.strongswan.org/docs/5.9/interop/windowsClients.html)。
 
    - 适用于 Windows 7, 8, 10 和 11 ([下载 .reg 文件](https://github.com/hwdsl2/vpn-extras/releases/download/v1.0.0/Enable_Stronger_Ciphers_for_IKEv2_on_Windows.reg))
 
@@ -108,9 +108,9 @@ Libreswan 支持通过使用 RSA 签名算法的 X.509 Machine Certificates 来�
      REG ADD HKLM\SYSTEM\CurrentControlSet\Services\RasMan\Parameters /v NegotiateDH2048_AES256 /t REG_DWORD /d 0x1 /f
      ```
 
-要连接到 VPN：单击系统托盘中的无线/网络图标，选择新的 VPN 连接，然后单击 **连接**。连接成功后，你可以到 [这里](https://www.ipchicken.com) 检测你的 IP 地址，应该显示为`你的 VPN 服务器 IP`。
+要连接到 VPN：单击系统托盘中的无线/网络图标，选择新的 VPN 连接，然后单击 **连接**。连接成功后，你可以到[这里](https://www.ipchicken.com)检测你的 IP 地址，应该显示为`你的 VPN 服务器 IP`。
 
-如果在连接过程中遇到错误，请参见 [故障排除](#ikev2-故障排除)。
+如果在连接过程中遇到错误，请参见[故障排除](#ikev2-故障排除)。
 
 <details>
 <summary>
@@ -119,21 +119,20 @@ Libreswan 支持通过使用 RSA 签名算法的 X.509 Machine Certificates 来�
 
 通过以下的步骤，可以删除添加的 VPN 连接，并将计算机恢复到导入 IKEv2 配置之前的状态（可选）。
 
-1. 在系统设置 - 网络 - VPN 中删除添加的 VPN 连接。Windows 7 用户可以在网络和共享中心 - 更改适配器设置中删除 VPN 连接。
+1. 在系统设置 -> 网络 -> VPN 中删除添加的 VPN 连接。Windows 7 用户可以在网络和共享中心 -> 更改适配器设置中删除 VPN 连接。
 
 1. （可选）删除 IKEv2 证书。
 
-   1. 按 Win+R 或在开始菜单中搜索 `mmc` 打开 *Microsoft Management Console*。
+   1. **Windows 8, 10 和 11:** 按 Win+R 然后输入 `certlm.msc`，或在开始菜单中搜索 `certlm.msc`。打开 *证书 - 本地计算机*。   
+      **Windows 7:** 按 Win+R 然后输入 `mmc`，或在开始菜单中搜索 `mmc`。打开 *管理控制台*。在 `文件 - 添加/删除管理单元` 的窗口中，选择添加 `证书` 并在弹出的窗口中选择 `计算机帐户 -> 本地计算机`。点击 `完成 -> 确定` 以保存设置。
 
-   1. 在 `File - Add/Remove Snap-In` 的窗口中，选择添加 `Certificates` 并在弹出的窗口中选择 `Computer account -> Local Computer`。点击 `Finish -> OK` 以保存设置。
+   1. 在 证书 -> 个人 -> 证书 中删除 IKEv2 客户端证书。该证书的名称与你指定的 IKEv2 客户端名称一致，默认为 `vpnclient`，该证书由 `IKEv2 VPN CA` 颁发。
 
-   1. 在 `Certificates - Personal - Certificates` 中删除 IKEv2 客户端证书。该证书的名称与你指定的 IKEv2 客户端名称一致，默认为 `vpnclient`，该证书由 `IKEv2 VPN CA` 颁发。
-
-   1. 在 `Certificates - Trusted Root Certification Authorities - Certificates` 中删除 IKEv2 VPN CA 证书。该证书是由 `IKEv2 VPN CA` 颁发的，颁发给 `IKEv2 VPN CA` 的证书。需要注意，删除这一步的证书时，`Certificates - Personal - Certificates` 中应不存在其他由 `IKEv2 VPN CA` 颁发的证书。
+   1. 在 证书 -> 受信任的根证书颁发机构 -> 证书 中删除 IKEv2 VPN CA 证书。该证书是由 `IKEv2 VPN CA` 颁发的，颁发给 `IKEv2 VPN CA` 的证书。需要注意，删除这一步的证书时，证书 -> 个人 -> 证书 中应不存在其他由 `IKEv2 VPN CA` 颁发的证书。
 
 1. （可选，适用于手动创建了 VPN 连接的用户）还原注册表配置。注意，在编辑注册表前应备份。
 
-   1. 按 Win+R 或在开始菜单中搜索 `regedit` 打开 *Registry Editor*。
+   1. 按 Win+R 或在开始菜单中搜索 `regedit` 打开 *注册表编辑器*。
 
    1. 在 `HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\Rasman\Parameters` 中删除名为 `NegotiateDH2048_AES256` 的项目，如果它存在。
 </details>
@@ -153,7 +152,7 @@ Libreswan 支持通过使用 RSA 签名算法的 X.509 Machine Certificates 来�
 
 （可选功能）启用 **VPN On Demand（按需连接）** 以在你的 Mac 连接到 Wi-Fi 时自动启动 VPN 连接。要启用它，选中 VPN 连接的 **按需连接** 复选框，然后单击 **应用**。对于 macOS Ventura 和更新版本，首先单击 VPN 连接右边的 "i" 图标，然后配置该选项。
 
-你可以自定义按需连接规则，以排除某些 Wi-Fi 网络（例如你的家庭网络）。参见 [:book: Book: 搭建自己的 IPsec VPN, OpenVPN 和 WireGuard 服务器](https://ko-fi.com/post/Support-this-project-and-get-access-to-supporter-o-X8X5FVFZC) 中的 "指南：为 macOS 和 iOS 自定义 IKEv2 VPN On Demand 规则"。
+你可以自定义按需连接规则，以排除某些 Wi-Fi 网络（例如你的家庭网络）。有关更多详细信息，请参阅 [:book: Book: 搭建自己的 VPN 服务器](https://ko-fi.com/post/Support-this-project-and-get-access-to-supporter-o-X8X5FVFZC)中的 "指南：为 macOS 和 iOS 自定义 IKEv2 VPN On Demand 规则" 一章。
 
 <details>
 <summary>
@@ -184,9 +183,9 @@ Libreswan 支持通过使用 RSA 签名算法的 X.509 Machine Certificates 来�
 1. 单击 **连接**。
 </details>
 
-连接成功后，你可以到 [这里](https://www.ipchicken.com) 检测你的 IP 地址，应该显示为`你的 VPN 服务器 IP`。
+连接成功后，你可以到[这里](https://www.ipchicken.com)检测你的 IP 地址，应该显示为`你的 VPN 服务器 IP`。
 
-如果在连接过程中遇到错误，请参见 [故障排除](#ikev2-故障排除)。
+如果在连接过程中遇到错误，请参见[故障排除](#ikev2-故障排除)。
 
 **注：** macOS 14 (Sonoma) 存在一个小问题，可能会导致 IKEv2 VPN 每 24-48 分钟断开并重新连接一次。其他 macOS 版本不受影响。有关详细信息和解决方法，请参阅 [macOS Sonoma 客户端重新连接](#macos-sonoma-客户端重新连接)。
 
@@ -205,7 +204,7 @@ Libreswan 支持通过使用 RSA 签名算法的 X.509 Machine Certificates 来�
 首先，将生成的 `.mobileconfig` 文件安全地传送到你的 iOS 设备，并且导入为 iOS 配置描述文件。要传送文件，你可以使用：
 
 1. AirDrop（隔空投送），或者
-1. 使用 [文件共享](https://support.apple.com/zh-cn/HT210598) 功能上传到设备（任何 App 目录），然后打开 iOS 设备上的 "文件" App，将上传的文件移动到 "On My iPhone" 目录下。然后单击它并到 "设置" App 中导入，或者
+1. 使用[文件共享](https://support.apple.com/zh-cn/HT210598)功能上传到设备（任何 App 目录），然后打开 iOS 设备上的 "文件" App，将上传的文件移动到 "On My iPhone" 目录下。然后单击它并到 "设置" App 中导入，或者
 1. 将文件放在一个你的安全的托管网站上，然后在 Mobile Safari 中下载并导入它们。
 
 在完成之后，检查并确保 "IKEv2 VPN" 显示在设置 -> 通用 -> VPN 与设备管理（或者描述文件）中。
@@ -217,8 +216,36 @@ Libreswan 支持通过使用 RSA 签名算法的 X.509 Machine Certificates 来�
 
 （可选功能）启用 **VPN On Demand（按需连接）** 以在你的 iOS 设备连接到 Wi-Fi 时自动启动 VPN 连接。要启用它，单击 VPN 连接右边的 "i" 图标，然后启用 **按需连接**。
 
-你可以自定义按需连接规则，以排除某些 Wi-Fi 网络（例如你的家庭网络），或者在 Wi-Fi 和蜂窝网络上都启动 VPN 连接。参见 [:book: Book: 搭建自己的 IPsec VPN, OpenVPN 和 WireGuard 服务器](https://ko-fi.com/post/Support-this-project-and-get-access-to-supporter-o-X8X5FVFZC) 中的 "指南：为 macOS 和 iOS 自定义 IKEv2 VPN On Demand 规则"。
+你可以自定义按需连接规则，以排除某些 Wi-Fi 网络（例如你的家庭网络）。有关更多详细信息，请参阅 [:book: Book: 搭建自己的 VPN 服务器](https://ko-fi.com/post/Support-this-project-and-get-access-to-supporter-o-X8X5FVFZC)中的 "指南：为 macOS 和 iOS 自定义 IKEv2 VPN On Demand 规则" 一章。
 
+<details>
+<summary>
+自定义按需连接规则：在 Wi-Fi 和蜂窝网络上连接。
+</summary>
+
+默认的 VPN On Demand 配置仅在 Wi-Fi 网络上启动 VPN 连接，而不会在蜂窝网络上启动 VPN 连接。如果你希望 VPN 在 Wi-Fi 和蜂窝网络上都启动连接：
+
+1. 编辑 VPN 服务器上的 `/opt/src/ikev2.sh`。找到以下行：
+   ```
+     <dict>
+       <key>InterfaceTypeMatch</key>
+       <string>Cellular</string>
+       <key>Action</key>
+       <string>Disconnect</string>
+     </dict>
+   ```
+   并将 "Disconnect" 替换为 "Connect"：
+   ```
+     <dict>
+       <key>InterfaceTypeMatch</key>
+       <string>Cellular</string>
+       <key>Action</key>
+       <string>Connect</string>
+     </dict>
+   ```
+2. 保存文件，然后运行 `sudo ikev2.sh` 为你的 iOS 设备导出更新后的客户端配置文件。
+3. 从你的 iOS 设备中移除之前导入的 VPN 配置文件，然后导入步骤 2 中生成的新 `.mobileconfig` 文件。
+</details>
 <details>
 <summary>
 如果你手动配置 IKEv2 而不是使用辅助脚本，点这里查看步骤。
@@ -227,7 +254,7 @@ Libreswan 支持通过使用 RSA 签名算法的 X.509 Machine Certificates 来�
 首先，将生成的 `ca.cer` 和 `.p12` 文件安全地传送到你的 iOS 设备，并且逐个导入为 iOS 配置描述文件。要传送文件，你可以使用：
 
 1. AirDrop（隔空投送），或者
-1. 使用 [文件共享](https://support.apple.com/zh-cn/HT210598) 功能上传到设备（任何 App 目录），然后打开 iOS 设备上的 "文件" App，将上传的文件移动到 "On My iPhone" 目录下。然后逐个单击它们并到 "设置" App 中导入，或者
+1. 使用[文件共享](https://support.apple.com/zh-cn/HT210598)功能上传到设备（任何 App 目录），然后打开 iOS 设备上的 "文件" App，将上传的文件移动到 "On My iPhone" 目录下。然后逐个单击它们并到 "设置" App 中导入，或者
 1. 将文件放在一个你的安全的托管网站上，然后在 Mobile Safari 中下载并导入它们。
 
 在完成之后，检查并确保新的客户端证书和 `IKEv2 VPN CA` 都显示在设置 -> 通用 -> VPN 与设备管理（或者描述文件）中。
@@ -248,9 +275,9 @@ Libreswan 支持通过使用 RSA 签名算法的 X.509 Machine Certificates 来�
 1. 启用 **VPN** 连接。
 </details>
 
-连接成功后，你可以到 [这里](https://www.ipchicken.com) 检测你的 IP 地址，应该显示为`你的 VPN 服务器 IP`。
+连接成功后，你可以到[这里](https://www.ipchicken.com)检测你的 IP 地址，应该显示为`你的 VPN 服务器 IP`。
 
-如果在连接过程中遇到错误，请参见 [故障排除](#ikev2-故障排除)。
+如果在连接过程中遇到错误，请参见[故障排除](#ikev2-故障排除)。
 
 <details>
 <summary>
@@ -326,9 +353,9 @@ Android 用户可以使用 strongSwan VPN 客户端连接（推荐）。
 1. 保存新的 VPN 连接，然后单击它以开始连接。
 </details>
 
-连接成功后，你可以到 [这里](https://www.ipchicken.com) 检测你的 IP 地址，应该显示为`你的 VPN 服务器 IP`。
+连接成功后，你可以到[这里](https://www.ipchicken.com)检测你的 IP 地址，应该显示为`你的 VPN 服务器 IP`。
 
-如果在连接过程中遇到错误，请参见 [故障排除](#ikev2-故障排除)。
+如果在连接过程中遇到错误，请参见[故障排除](#ikev2-故障排除)。
 
 #### 使用系统自带的 IKEv2 客户端
 
@@ -349,16 +376,16 @@ Android 11+ 用户也可以使用系统自带的 IKEv2 客户端连接。
 1. 在 **类型** 下拉菜单选择 **IKEv2/IPSec RSA**。
 1. 在 **服务器地址** 字段中输入 `你的 VPN 服务器 IP` （或者域名）。   
    **注：** 它必须与 IKEv2 辅助脚本输出中的服务器地址 **完全一致**。
-1. 在 **IPSec 标识符** 字段中输入任意内容（例如 `empty`）。   
-   **注：** 该字段不应该为必填。它是 Android 的一个 bug。
+1. 在 **IPSec 标识符** 字段中输入任意内容。   
+   **注：** 该字段不应该为必填项。它是 Android 的一个 bug。
 1. 在 **IPSec 用户证书** 下拉菜单选择你导入的证书。
 1. 在 **IPSec CA 证书** 下拉菜单选择你导入的证书。
 1. 在 **IPSec 服务器证书** 下拉菜单选择 **(来自服务器)**。
 1. 单击 **保存**。然后单击新的 VPN 连接并单击 **连接**。
 
-连接成功后，你可以到 [这里](https://www.ipchicken.com) 检测你的 IP 地址，应该显示为`你的 VPN 服务器 IP`。
+连接成功后，你可以到[这里](https://www.ipchicken.com)检测你的 IP 地址，应该显示为`你的 VPN 服务器 IP`。
 
-如果在连接过程中遇到错误，请参见 [故障排除](#ikev2-故障排除)。
+如果在连接过程中遇到错误，请参见[故障排除](#ikev2-故障排除)。
 
 ### Chrome OS
 
@@ -396,11 +423,11 @@ sudo certutil -L -d sql:/etc/ipsec.d -n "IKEv2 VPN CA" -a -o ca.cer
 1. 启用 **保存身份信息和密码**。
 1. 单击 **连接**。
 
-连接成功后，网络状态图标上会出现 VPN 指示。你可以到 [这里](https://www.ipchicken.com) 检测你的 IP 地址，应该显示为`你的 VPN 服务器 IP`。
+连接成功后，网络状态图标上会出现 VPN 指示。你可以到[这里](https://www.ipchicken.com)检测你的 IP 地址，应该显示为`你的 VPN 服务器 IP`。
 
 （可选功能）你可以选择启用 Chrome OS 上的 "始终开启的 VPN" 功能。要管理该设置，进入设置 -> 网络，然后单击 **VPN**。
 
-如果在连接过程中遇到错误，请参见 [故障排除](#ikev2-故障排除)。
+如果在连接过程中遇到错误，请参见[故障排除](#ikev2-故障排除)。
 
 ### Linux
 
@@ -462,11 +489,11 @@ sudo chmod 600 ca.cer client.cer client.key
 1. 单击 **Add** 保存 VPN 连接信息。
 1. 启用 **VPN** 连接。
 
-另外，你也可以使用命令行连接。示例步骤请参见 [#1399](https://github.com/hwdsl2/setup-ipsec-vpn/issues/1399) 和 [#1007](https://github.com/hwdsl2/setup-ipsec-vpn/issues/1007)。如果你遇到错误 `Could not find source connection`，编辑 `/etc/netplan/01-netcfg.yaml` 并将 `renderer: networkd` 替换为 `renderer: NetworkManager`，然后运行 `sudo netplan apply`。要连接到 VPN，运行 `sudo nmcli c up VPN`。要断开连接：`sudo nmcli c down VPN`。
+另外，你也可以使用命令行连接。示例步骤请参见 [#1399](https://github.com/hwdsl2/setup-ipsec-vpn/issues/1399)、[#1007](https://github.com/hwdsl2/setup-ipsec-vpn/issues/1007) 和 [#1789](https://github.com/hwdsl2/setup-ipsec-vpn/issues/1789)。如果你遇到错误 `Could not find source connection`，编辑 `/etc/netplan/01-netcfg.yaml` 并将 `renderer: networkd` 替换为 `renderer: NetworkManager`，然后运行 `sudo netplan apply`。如果使用 `nmcli` 连接到 VPN，运行 `sudo nmcli c up VPN`。要断开连接：`sudo nmcli c down VPN`。
 
-连接成功后，你可以到 [这里](https://www.ipchicken.com) 检测你的 IP 地址，应该显示为`你的 VPN 服务器 IP`。
+连接成功后，你可以到[这里](https://www.ipchicken.com)检测你的 IP 地址，应该显示为`你的 VPN 服务器 IP`。
 
-如果在连接过程中遇到错误，请参见 [故障排除](#ikev2-故障排除)。
+如果在连接过程中遇到错误，请参见[故障排除](#ikev2-故障排除)。
 
 ### RouterOS
 
@@ -546,9 +573,11 @@ sudo chmod 600 ca.cer client.cer client.key
 
 *其他语言版本: [English](ikev2-howto.md#ikev2-troubleshooting), [中文](ikev2-howto-zh.md#ikev2-故障排除)。*
 
-**另见：** [检查日志及 VPN 状态](clients-zh.md#检查日志及-vpn-状态)，[IKEv1 故障排除](clients-zh.md#ikev1-故障排除) 和 [高级用法](advanced-usage-zh.md)。
+**另见：** [检查日志及 VPN 状态](clients-zh.md#检查日志及-vpn-状态)，[IKEv1 故障排除](clients-zh.md#ikev1-故障排除)和[高级用法](advanced-usage-zh.md)。
 
 * [无法连接到 VPN 服务器](#无法连接到-vpn-服务器)
+* [IPsec SA 错误](#ipsec-sa-错误)
+* [Ubuntu 20.04 无法导入客户端配置](#ubuntu-2004-无法导入客户端配置)
 * [macOS Sonoma 客户端重新连接](#macos-sonoma-客户端重新连接)
 * [无法连接多个 IKEv2 客户端](#无法连接多个-ikev2-客户端)
 * [IKE 身份验证凭证不可接受](#ike-身份验证凭证不可接受)
@@ -566,52 +595,61 @@ sudo chmod 600 ca.cer client.cer client.key
 
 [检查日志及 VPN 状态](clients-zh.md#检查日志及-vpn-状态)是否有错误。如果你遇到 retransmission 相关错误并且无法连接，说明 VPN 客户端和服务器之间的网络可能有问题。如果你从中国大陆进行连接，请考虑改用 IPsec VPN 以外的其他解决方案。
 
+### IPsec SA 错误
+
+如果 Libreswan 日志中出现 `Protocol not supported (errno 93)`，`Requested type not found`，`Adding IPsec SA failed` 或者 `XFRM_MSG_DELPOLICY` 等错误，服务器可能禁用了 ESP 内核支持。
+
+在基于 RHEL 10 的系统上已有相关报告，某些安全缓解措施可能会在 modprobe 配置中禁用 `esp4` 或 `esp6`，例如 `/etc/modprobe.d/dirtyfrag.conf`。IPsec VPN 需要 ESP 支持。请更新内核/安全软件包，或者遵循你的发行版文档；在更改这些设置后，重启 IPsec 或重新运行 VPN 安装脚本。
+
+### Ubuntu 20.04 无法导入客户端配置
+
+如果你在 2024-04-10 之前安装了 IPsec VPN，并且你的 VPN 服务器运行的是 Ubuntu Linux 版本 20.04，那么你可能会遇到无法在 iOS 或 macOS 设备上导入新生成的客户端配置文件 (`.mobileconfig`) 的问题，例如提示密码不正确。这可能是由 Ubuntu 20.04 上 libnss3 相关软件包的更新引起的，需要对 IKEv2 脚本进行一些更改 ([25670f3](https://github.com/hwdsl2/setup-ipsec-vpn/commit/25670f3))。
+
+要解决此问题，请首先按照[这些步骤](#更新-ikev2-辅助脚本)将服务器上的 IKEv2 脚本更新到最新版本。然后运行 `sudo ikev2.sh` 并选择 "export" 以重新创建客户端配置文件。
+
 ### macOS Sonoma 客户端重新连接
 
 macOS 14 (Sonoma) 存在[一个小问题](https://github.com/hwdsl2/setup-ipsec-vpn/issues/1486)，可能会导致 IKEv2 VPN 每 24-48 分钟断开并重新连接一次。其他 macOS 版本不受影响。首先[检查你的 macOS 版本](https://support.apple.com/zh-cn/HT201260)。要解决此问题，请按以下步骤操作。
 
-**注：** 应用此解决方案后，更新后的 VPN 服务器配置可能不适用于 Windows 或 Android 客户端。对于这些客户端，你可能需要在 `ikev2.conf` 中将 `pfs=yes` 更改回 `pfs=no`，然后运行 `service ipsec restart` 或重启 Docker 容器。
+**注：** 如果你在 2023 年 12 月 10 日之后安装了 IPsec VPN，则无需执行任何操作，因为已经包含以下修复。
 
-1. 编辑 VPN 服务器上的 `/etc/ipsec.d/ikev2.conf`。首先将 `pfs=no` 替换为 `pfs=yes`。然后找到这些行 `ike=...` 和 `phase2alg=...`，并将它们替换为以下内容，开头必须空两格：
+1. 编辑 VPN 服务器上的 `/etc/ipsec.d/ikev2.conf`。找到这一行：
    ```
-     ike=aes256-sha2_256;dh19,aes256-sha2,aes128-sha2,aes256-sha1,aes128-sha1
-     phase2alg=aes256-sha2_256,aes_gcm-null,aes128-sha1,aes256-sha1,aes128-sha2,aes256-sha2
+     ike=aes256-sha2,aes128-sha2,aes256-sha1,aes128-sha1
+   ```
+   并将它替换为以下内容：
+   ```
+     ike=aes_gcm_c_256-hmac_sha2_256-ecp_256,aes256-sha2,aes128-sha2,aes256-sha1,aes128-sha1
    ```
    **注：** Docker 用户需要首先[在容器中运行 Bash shell](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/docs/advanced-usage-zh.md#在容器中运行-bash-shell)。
 1. 保存文件并运行 `service ipsec restart`。Docker 用户：在下面的第 4 步之后退出 (`exit`) 容器并运行 `docker restart ipsec-vpn-server`。
 1. 编辑 VPN 服务器上的 `/opt/src/ikev2.sh`。找到以下部分并将其替换为这些新值：
    ```
-           <key>ChildSecurityAssociationParameters</key>
-           <dict>
-             <key>DiffieHellmanGroup</key>
-             <integer>19</integer>
-             <key>EncryptionAlgorithm</key>
-             <string>AES-256</string>
-             <key>IntegrityAlgorithm</key>
-             <string>SHA2-256</string>
-             <key>LifeTimeInMinutes</key>
-             <integer>1410</integer>
-           </dict>
+     <key>ChildSecurityAssociationParameters</key>
+     <dict>
+       <key>DiffieHellmanGroup</key>
+       <integer>19</integer>
+       <key>EncryptionAlgorithm</key>
+       <string>AES-256-GCM</string>
+       <key>LifeTimeInMinutes</key>
+       <integer>1410</integer>
+     </dict>
    ```
    ```
-           <key>EnablePFS</key>
-           <integer>1</integer>
+     <key>IKESecurityAssociationParameters</key>
+     <dict>
+       <key>DiffieHellmanGroup</key>
+       <integer>19</integer>
+       <key>EncryptionAlgorithm</key>
+       <string>AES-256-GCM</string>
+       <key>IntegrityAlgorithm</key>
+       <string>SHA2-256</string>
+       <key>LifeTimeInMinutes</key>
+       <integer>1410</integer>
+     </dict>
    ```
-   ```
-           <key>IKESecurityAssociationParameters</key>
-           <dict>
-             <key>DiffieHellmanGroup</key>
-             <integer>19</integer>
-             <key>EncryptionAlgorithm</key>
-             <string>AES-256</string>
-             <key>IntegrityAlgorithm</key>
-             <string>SHA2-256</string>
-             <key>LifeTimeInMinutes</key>
-             <integer>1410</integer>
-           </dict>
-   ```
-1. 运行 `sudo ikev2.sh` 为你的每个 macOS 和 iOS (iPhone/iPad) 设备导出（或添加）更新后的客户端配置文件。
-1. 从你的 macOS 和 iOS 设备中移除之前导入的 IKEv2 配置文件（如果有），然后导入更新后的 `.mobileconfig` 文件。请参阅[配置 IKEv2 VPN 客户端](#配置-ikev2-vpn-客户端)。Docker 用户请看[配置并使用 IKEv2 VPN](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/README-zh.md#配置并使用-ikev2-vpn)。
+1. 运行 `sudo ikev2.sh` 为你的每个 macOS 设备导出（或添加）更新后的客户端配置文件。
+1. 从你的 macOS 设备中移除之前导入的 IKEv2 配置文件（如果有），然后导入更新后的 `.mobileconfig` 文件。请参阅[配置 IKEv2 VPN 客户端](#配置-ikev2-vpn-客户端)。Docker 用户请看[配置并使用 IKEv2 VPN](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/README-zh.md#配置并使用-ikev2-vpn)。
 
 ### 无法连接多个 IKEv2 客户端
 
@@ -639,7 +677,7 @@ REG ADD HKLM\SYSTEM\CurrentControlSet\Services\RasMan\Parameters /v NegotiateDH2
 
 ### 参数错误 parameter is incorrect
 
-如果你在尝试使用 IKEv2 模式连接时遇到 "错误 87：参数错误 The parameter is incorrect"，请尝试 [这个 Issue](https://github.com/trailofbits/algo/issues/1051) 中的解决方案，更具体地说，第 2 步 "reset device manager adapters"。
+如果你在尝试使用 IKEv2 模式连接时遇到 "错误 87：参数错误 The parameter is incorrect"，请尝试[这个 Issue](https://github.com/trailofbits/algo/issues/1051) 中的解决方案，更具体地说，第 2 步 "reset device manager adapters"。
 
 ### 连接 IKEv2 后不能打开网站
 
@@ -654,7 +692,7 @@ REG ADD HKLM\SYSTEM\CurrentControlSet\Services\RasMan\Parameters /v NegotiateDH2
 
    此设置 **不会** 在重启后保持。要永久更改 MTU 大小，请参阅网络上的相关文章。
 
-1. 如果你的 Android 或 Linux VPN 客户端可以连接到 IKEv2 但是无法打开网站，请尝试 [Android/Linux MTU/MSS 问题](clients-zh.md#androidlinux-mtumss-问题) 中的解决方案。
+1. 如果你的 Android 或 Linux VPN 客户端可以连接到 IKEv2 但是无法打开网站，请尝试 [Android/Linux MTU/MSS 问题](clients-zh.md#androidlinux-mtumss-问题)中的解决方案。
 
 1. Windows VPN 客户端在连接后可能不使用 IKEv2 指定的 DNS 服务器，如果该客户端的因特网适配器的 DNS 服务器在本地网段上。要解决此问题，可以在网络连接属性 -> TCP/IPv4 中手动输入 DNS 服务器，例如 Google Public DNS (8.8.8.8, 8.8.4.4)。更多信息请参见 [Windows DNS 泄漏和 IPv6](clients-zh.md#windows-dns-泄漏和-ipv6)。
 
@@ -694,7 +732,7 @@ sudo ikev2.sh --listclients
 sudo ikev2.sh --addclient [client name]
 ```
 
-另外，你也可以手动添加客户端证书。参见 [这一小节](#手动配置-ikev2) 的第 4 步。
+另外，你也可以手动添加客户端证书。参见[这一小节](#手动配置-ikev2)的第 4 步。
 
 ### 导出已有的客户端的配置
 
@@ -845,7 +883,7 @@ sudo ikev2.sh --revokeclient [client name]
        CRL Extensions:
    ```
 
-   **注：** 如果需要从 CRL 删除一个证书，可以将上面的 `addcert 3446275956 20200606220100Z` 替换为 `rmcert 3446275956`。关于 `crlutil` 的其它用法参见 [这里](https://firefox-source-docs.mozilla.org/security/nss/legacy/tools/nss_tools_crlutil/index.html)。
+   **注：** 如果需要从 CRL 删除一个证书，可以将上面的 `addcert 3446275956 20200606220100Z` 替换为 `rmcert 3446275956`。关于 `crlutil` 的其它用法参见[这里](https://firefox-source-docs.mozilla.org/security/nss/legacy/tools/nss_tools_crlutil/index.html)。
 
 1. 最后，让 Libreswan 重新读取已更新的 CRL。
 
@@ -858,7 +896,7 @@ sudo ikev2.sh --revokeclient [client name]
 
 在某些情况下，你可能需要在配置之后更改 IKEv2 服务器地址。例如切换为使用域名，或者在服务器的 IP 更改之后。请注意，你在 VPN 客户端指定的服务器地址必须与 IKEv2 辅助脚本输出中的服务器地址 **完全一致**，否则客户端可能无法连接。
 
-要更改服务器地址，运行 [辅助脚本](../extras/ikev2changeaddr.sh) 并按提示操作。
+要更改服务器地址，运行[辅助脚本](../extras/ikev2changeaddr.sh)并按提示操作。
 
 ```bash
 wget https://get.vpnsetup.net/ikev2addr -O ikev2addr.sh
@@ -878,11 +916,11 @@ chmod +x /opt/src/ikev2.sh && ln -s /opt/src/ikev2.sh /usr/bin 2>/dev/null
 
 ## 使用辅助脚本配置 IKEv2
 
-**注：** 默认情况下，运行 VPN 安装脚本时会自动配置 IKEv2。你可以跳过此部分并转到 [配置 IKEv2 VPN 客户端](#配置-ikev2-vpn-客户端)。
+**注：** 默认情况下，运行 VPN 安装脚本时会自动配置 IKEv2。你可以跳过此部分并转到[配置 IKEv2 VPN 客户端](#配置-ikev2-vpn-客户端)。
 
-**重要：** 在继续之前，你应该已经成功地 [搭建自己的 VPN 服务器](../README-zh.md)。**Docker 用户请看 [这里](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/README-zh.md#配置并使用-ikev2-vpn)**。
+**重要：** 在继续之前，你应该已经成功地[搭建自己的 VPN 服务器](../README-zh.md)。Docker 用户请看[配置并使用 IKEv2 VPN](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/README-zh.md#配置并使用-ikev2-vpn)。
 
-使用这个 [辅助脚本](../extras/ikev2setup.sh) 来自动地在 VPN 服务器上配置 IKEv2：
+使用这个[辅助脚本](../extras/ikev2setup.sh)来自动地在 VPN 服务器上配置 IKEv2：
 
 ```bash
 # 使用默认选项配置 IKEv2
@@ -891,9 +929,9 @@ sudo ikev2.sh --auto
 sudo ikev2.sh
 ```
 
-**注：** 如果已配置 IKEv2，但是你想要自定义 IKEv2 选项，首先 [移除 IKEv2](#移除-ikev2)，然后运行 `sudo ikev2.sh` 重新配置。
+**注：** 如果已配置 IKEv2，但是你想要自定义 IKEv2 选项，首先[移除 IKEv2](#移除-ikev2)，然后运行 `sudo ikev2.sh` 重新配置。
 
-在完成之后，请转到 [配置 IKEv2 VPN 客户端](#配置-ikev2-vpn-客户端)。高级用户可以启用 [仅限 IKEv2 模式](advanced-usage-zh.md#仅限-ikev2-的-vpn)。这是可选的。
+在完成之后，请转到[配置 IKEv2 VPN 客户端](#配置-ikev2-vpn-客户端)。高级用户可以启用[仅限 IKEv2 模式](advanced-usage-zh.md#仅限-ikev2-的-vpn)。这是可选的。
 
 <details>
 <summary>
@@ -954,6 +992,7 @@ Options:
   --revokeclient [client name]  revoke an existing client
   --deleteclient [client name]  delete an existing client
   --removeikev2                 remove IKEv2 and delete all certificates and keys from the IPsec database
+  -y, --yes                     assume "yes" as answer to prompts when revoking/deleting a client or removing IKEv2
   -h, --help                    show this help message and exit
 
 To customize IKEv2 or client options, run this script without arguments.
@@ -962,7 +1001,7 @@ To customize IKEv2 or client options, run this script without arguments.
 
 ## 手动配置 IKEv2
 
-除了使用 [辅助脚本](#使用辅助脚本配置-ikev2) 之外，高级用户也可以手动在 VPN 服务器上配置 IKEv2。在继续之前，推荐 [升级 Libreswan](../README-zh.md#升级libreswan) 到最新版本。
+除了使用[辅助脚本](#使用辅助脚本配置-ikev2)之外，高级用户也可以手动在 VPN 服务器上配置 IKEv2。在继续之前，推荐[升级 Libreswan](../README-zh.md#升级-libreswan) 到最新版本。
 
 下面举例说明如何手动在 Libreswan 上配置 IKEv2。以下命令必须用 `root` 账户运行。
 
@@ -974,8 +1013,8 @@ To customize IKEv2 or client options, run this script without arguments.
 1. 获取 VPN 服务器的公共 IP 地址，将它保存到变量并检查。
 
    ```bash
-   PUBLIC_IP=$(dig @resolver1.opendns.com -t A -4 myip.opendns.com +short)
-   [ -z "$PUBLIC_IP" ] && PUBLIC_IP=$(wget -t 2 -T 10 -qO- http://ipv4.icanhazip.com)
+   PUBLIC_IP=$(wget -t 2 -T 10 -4 --max-redirect=0 -qO- https://ipv4.icanhazip.com) \
+     || PUBLIC_IP=$(wget -t 2 -T 10 -4 --max-redirect=0 -qO- https://api.ipify.org)
    printf '%s\n' "$PUBLIC_IP"
    ```
 
@@ -1012,12 +1051,11 @@ To customize IKEv2 or client options, run this script without arguments.
      narrowing=yes
      dpddelay=30
      retransmit-timeout=300s
-     dpdaction=clear
      auto=add
      ikev2=insist
      rekey=no
      pfs=no
-     ike=aes256-sha2,aes128-sha2,aes256-sha1,aes128-sha1
+     ike=aes_gcm_c_256-hmac_sha2_256-ecp_256,aes256-sha2,aes128-sha2,aes256-sha1,aes128-sha1
      phase2alg=aes_gcm-null,aes128-sha1,aes256-sha1,aes128-sha2,aes256-sha2
      ikelifetime=24h
      salifetime=24h
@@ -1160,7 +1198,7 @@ To customize IKEv2 or client options, run this script without arguments.
    vpnclient                                          u,u,u
    ```
 
-   **注：** 如需显示证书内容，可使用 `certutil -L -d sql:/etc/ipsec.d -n "Nickname"`。要吊销客户端证书，请转到[这一节](#吊销客户端证书)。关于 `certutil` 的其它用法参见 [这里](https://firefox-source-docs.mozilla.org/security/nss/legacy/tools/nss_tools_certutil/index.html)。
+   **注：** 如需显示证书内容，可使用 `certutil -L -d sql:/etc/ipsec.d -n "Nickname"`。要吊销客户端证书，请转到[这一节](#吊销客户端证书)。关于 `certutil` 的其它用法参见[这里](https://firefox-source-docs.mozilla.org/security/nss/legacy/tools/nss_tools_certutil/index.html)。
 
 1. **（重要）重启 IPsec 服务**：
 
@@ -1179,7 +1217,7 @@ To customize IKEv2 or client options, run this script without arguments.
 sudo ikev2.sh --removeikev2
 ```
 
-在移除 IKEv2 之后，如果你想要重新配置 IKEv2，参见 [这一小节](#使用辅助脚本配置-ikev2)。
+在移除 IKEv2 之后，如果你想要重新配置 IKEv2，参见[这一小节](#使用辅助脚本配置-ikev2)。
 
 <details>
 <summary>
@@ -1247,8 +1285,8 @@ sudo ikev2.sh --removeikev2
 
 ## 授权协议
 
-版权所有 (C) 2016-2023 [Lin Song](https://github.com/hwdsl2) [![View my profile on LinkedIn](https://static.licdn.com/scds/common/u/img/webpromo/btn_viewmy_160x25.png)](https://www.linkedin.com/in/linsongui)   
+版权所有 (C) 2016-2026 [Lin Song](https://github.com/hwdsl2) [![View my profile on LinkedIn](https://static.licdn.com/scds/common/u/img/webpromo/btn_viewmy_160x25.png)](https://www.linkedin.com/in/linsongui)   
 
 [![Creative Commons License](https://i.creativecommons.org/l/by-sa/3.0/88x31.png)](http://creativecommons.org/licenses/by-sa/3.0/)   
-这个项目是以 [知识共享署名-相同方式共享3.0](http://creativecommons.org/licenses/by-sa/3.0/) 许可协议授权。   
+这个项目是以[知识共享署名-相同方式共享3.0](http://creativecommons.org/licenses/by-sa/3.0/) 许可协议授权。   
 必须署名： 请包括我的名字在任何衍生产品，并且让我知道你是如何改善它的！

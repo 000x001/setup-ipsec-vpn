@@ -5,7 +5,7 @@
 # The latest version of this script is available at:
 # https://github.com/hwdsl2/setup-ipsec-vpn
 #
-# Copyright (C) 2021-2023 Lin Song <linsongui@gmail.com>
+# Copyright (C) 2021-2026 Lin Song <linsongui@gmail.com>
 #
 # This work is licensed under the Creative Commons Attribution-ShareAlike 3.0
 # Unported License: http://creativecommons.org/licenses/by-sa/3.0/
@@ -51,9 +51,6 @@ check_os() {
       ;;
   esac
   os_ver=$(. /etc/os-release && printf '%s' "$VERSION_ID" | cut -d '.' -f 1,2)
-  if [ "$os_ver" != "3.17" ] && [ "$os_ver" != "3.18" ]; then
-    exiterr "This script only supports Alpine Linux 3.17/3.18."
-  fi
 }
 
 check_libreswan() {
@@ -69,7 +66,7 @@ EOF
 }
 
 get_swan_ver() {
-  swan_ver_cur=4.12
+  swan_ver_cur=5.4
   base_url="https://github.com/hwdsl2/vpn-extras/releases/download/v1.0.0"
   swan_ver_url="$base_url/upg-v1-$os_type-$os_ver-swanver"
   swan_ver_latest=$(wget -t 2 -T 10 -qO- "$swan_ver_url" | head -n 1)
@@ -80,8 +77,8 @@ get_swan_ver() {
 }
 
 check_swan_ver() {
-  if [ "$SWAN_VER" = "4.8" ]; then
-    exiterr "Libreswan version 4.8 is not supported."
+  if [ "$SWAN_VER" = "4.8" ] || [ "$SWAN_VER" = "4.13" ]; then
+    exiterr "Libreswan version $SWAN_VER is not supported."
   fi
   if ! printf '%s\n%s' "4.5" "$SWAN_VER" | sort -C -V \
     || ! printf '%s\n%s' "$SWAN_VER" "$swan_ver_cur" | sort -C -V; then
@@ -146,8 +143,8 @@ install_pkgs() {
   bigecho "Installing required packages..."
   (
     set -x
-    apk add -U -q bash bind-tools coreutils openssl wget iproute2 sed grep \
-    libcap-ng libcurl libevent linux-pam musl nspr nss nss-tools \
+    apk add -U -q bash bind-tools coreutils openssl wget iptables ip6tables iproute2 \
+    sed grep libcap-ng libcurl libevent linux-pam musl nspr nss nss-tools \
     bison flex gcc make libc-dev bsd-compat-headers linux-pam-dev nss-dev \
     libcap-ng-dev libevent-dev curl-dev nspr-dev uuidgen openrc
   ) || exiterr2
@@ -175,18 +172,30 @@ install_libreswan() {
 cat > Makefile.inc.local <<'EOF'
 WERROR_CFLAGS=-w -s
 USE_DNSSEC=false
-USE_DH2=true
 FINALNSSDIR=/etc/ipsec.d
+NSSDIR=/etc/ipsec.d
 EOF
   if [ "$SWAN_VER" = "4.5" ] || [ "$SWAN_VER" = "4.6" ] \
     || [ "$SWAN_VER" = "4.7" ]; then
     echo "USE_GLIBC_KERN_FLIP_HEADERS=true" >> Makefile.inc.local
   fi
+  if printf '%s\n%s' "5.4" "$SWAN_VER" | sort -C -V; then
+    if ! grep -qs XFRM_MODE_IPTFS /usr/include/linux/xfrm.h; then
+      echo "USE_XFRM_HEADER_COPY=true" >> Makefile.inc.local
+    fi
+    if ! pkg-config --atleast-version=3.118.1 nss >/dev/null 2>&1; then
+      echo "USE_ML_KEM_768=false" >> Makefile.inc.local
+      echo "USE_ML_KEM_1024=false" >> Makefile.inc.local
+    fi
+    if ! pkg-config --atleast-version=3.99 nss >/dev/null 2>&1; then
+      echo "USE_EDDSA=false" >> Makefile.inc.local
+    fi
+  fi
   NPROCS=$(grep -c ^processor /proc/cpuinfo)
   [ -z "$NPROCS" ] && NPROCS=1
   (
     set -x
-    make "-j$((NPROCS+1))" -s base >/dev/null && make -s install-base >/dev/null
+    make "-j$((NPROCS+1))" -s base >/dev/null 2>&1 && make -s install-base >/dev/null 2>&1
   )
   cd /opt/src || exit 1
   /bin/rm -rf "/opt/src/libreswan-$SWAN_VER"
@@ -243,6 +252,9 @@ update_config() {
   fi
   sed -i "/ikev2=never/d" /etc/ipsec.conf
   sed -i "/conn shared/a \  ikev2=never" /etc/ipsec.conf
+  if ! grep -qs "ikev1-policy" /etc/ipsec.conf; then
+    sed -i "/config setup/a \  ikev1-policy=accept" /etc/ipsec.conf
+  fi
   if grep -qs ike-frag /etc/ipsec.d/ikev2.conf; then
     sed -i".old-$SYS_DT" 's/^[[:space:]]\+ike-frag=/  fragmentation=/' /etc/ipsec.d/ikev2.conf
   fi

@@ -1,14 +1,14 @@
 #!/bin/sh
 #
 # Script for automatic setup of an IPsec VPN server on Ubuntu, Debian, CentOS/RHEL,
-# Rocky Linux, AlmaLinux, Oracle Linux, Amazon Linux 2 and Alpine Linux
+# Rocky Linux, AlmaLinux, Oracle Linux and Alpine Linux
 #
 # DO NOT RUN THIS SCRIPT ON YOUR PC OR MAC!
 #
 # The latest version of this script is available at:
 # https://github.com/hwdsl2/setup-ipsec-vpn
 #
-# Copyright (C) 2021-2023 Lin Song <linsongui@gmail.com>
+# Copyright (C) 2021-2026 Lin Song <linsongui@gmail.com>
 #
 # This work is licensed under the Creative Commons Attribution-ShareAlike 3.0
 # Unported License: http://creativecommons.org/licenses/by-sa/3.0/
@@ -81,18 +81,21 @@ check_os() {
     elif grep -q "release 8" "$rh_file"; then
       os_ver=8
       grep -qi stream "$rh_file" && os_ver=8s
-      if [ "$os_type$os_ver" = "centos8" ]; then
-        exiterr "CentOS Linux 8 is EOL and not supported."
-      fi
     elif grep -q "release 9" "$rh_file"; then
       os_ver=9
       grep -qi stream "$rh_file" && os_ver=9s
+    elif grep -q "release 10" "$rh_file"; then
+      os_ver=10
+      grep -qi stream "$rh_file" && os_ver=10s
     else
-      exiterr "This script only supports CentOS/RHEL 7-9."
+      exiterr "This script only supports CentOS/RHEL 7-10."
+    fi
+    if [ "$os_type" = "centos" ] \
+      && { [ "$os_ver" = 7 ] || [ "$os_ver" = 8 ] || [ "$os_ver" = 8s ]; }; then
+      exiterr "CentOS Linux $os_ver is EOL and not supported."
     fi
   elif grep -qs "Amazon Linux release 2 " /etc/system-release; then
-    os_type=amzn
-    os_ver=2
+    exiterr "Amazon Linux 2 has reached end of support and is no longer supported by this project. Please migrate to a currently supported operating system."
   elif grep -qs "Amazon Linux release 2023" /etc/system-release; then
     exiterr "Amazon Linux 2023 is not supported."
   else
@@ -102,11 +105,8 @@ check_os() {
       [Uu]buntu)
         os_type=ubuntu
         ;;
-      [Dd]ebian|[Kk]ali)
+      [Dd]ebian|[Kk]ali|[Rr]aspbian)
         os_type=debian
-        ;;
-      [Rr]aspbian)
-        os_type=raspbian
         ;;
       [Aa]lpine)
         os_type=alpine
@@ -115,20 +115,25 @@ check_os() {
 cat 1>&2 <<'EOF'
 Error: This script only supports one of the following OS:
        Ubuntu, Debian, CentOS/RHEL, Rocky Linux, AlmaLinux,
-       Oracle Linux, Amazon Linux 2 or Alpine Linux
+       Oracle Linux or Alpine Linux
 EOF
         exit 1
         ;;
     esac
     if [ "$os_type" = "alpine" ]; then
       os_ver=$(. /etc/os-release && printf '%s' "$VERSION_ID" | cut -d '.' -f 1,2)
-      if [ "$os_ver" != "3.17" ] && [ "$os_ver" != "3.18" ]; then
-        exiterr "This script only supports Alpine Linux 3.17/3.18."
+      if [ "$os_ver" != "3.22" ] && [ "$os_ver" != "3.23" ]; then
+        exiterr "This script only supports Alpine Linux 3.22/3.23."
       fi
     else
       os_ver=$(sed 's/\..*//' /etc/debian_version | tr -dc 'A-Za-z0-9')
-      if [ "$os_ver" = 8 ] || [ "$os_ver" = "jessiesid" ]; then
-        exiterr "Debian 8 or Ubuntu < 16.04 is not supported."
+      if [ "$os_ver" = 8 ] || [ "$os_ver" = 9 ] || [ "$os_ver" = "stretchsid" ] \
+        || [ "$os_ver" = "bustersid" ] || [ -z "$os_ver" ]; then
+cat 1>&2 <<EOF
+Error: This script requires Debian >= 10 or Ubuntu >= 20.04.
+       This version of Ubuntu/Debian is too old and not supported.
+EOF
+        exit 1
       fi
     fi
   fi
@@ -142,7 +147,7 @@ check_iface() {
   def_state=$(cat "/sys/class/net/$def_iface/operstate" 2>/dev/null)
   check_wl=0
   if [ -n "$def_state" ] && [ "$def_state" != "down" ]; then
-    if [ "$os_type" = "ubuntu" ] || [ "$os_type" = "debian" ] || [ "$os_type" = "raspbian" ]; then
+    if [ "$os_type" = "ubuntu" ] || [ "$os_type" = "debian" ]; then
       if ! uname -m | grep -qi -e '^arm' -e '^aarch64'; then
         check_wl=1
       fi
@@ -209,7 +214,7 @@ wait_for_apt() {
   while fuser "$apt_lk" "$pkg_lk" >/dev/null 2>&1 \
     || lsof "$apt_lk" >/dev/null 2>&1 || lsof "$pkg_lk" >/dev/null 2>&1; do
     [ "$count" = 0 ] && echo "## Waiting for apt to be available..."
-    [ "$count" -ge 100 ] && exiterr "Could not get apt/dpkg lock."
+    [ "$count" -ge 200 ] && exiterr "Could not get apt/dpkg lock."
     count=$((count+1))
     printf '%s' '.'
     sleep 3
@@ -218,7 +223,7 @@ wait_for_apt() {
 
 install_pkgs() {
   if ! command -v wget >/dev/null 2>&1; then
-    if [ "$os_type" = "ubuntu" ] || [ "$os_type" = "debian" ] || [ "$os_type" = "raspbian" ]; then
+    if [ "$os_type" = "ubuntu" ] || [ "$os_type" = "debian" ]; then
       wait_for_apt
       export DEBIAN_FRONTEND=noninteractive
       (
@@ -251,8 +256,6 @@ get_setup_url() {
   if [ "$os_type" = "centos" ] || [ "$os_type" = "rhel" ] || [ "$os_type" = "rocky" ] \
     || [ "$os_type" = "alma" ] || [ "$os_type" = "ol" ]; then
     sh_file="vpnsetup_centos.sh"
-  elif [ "$os_type" = "amzn" ]; then
-    sh_file="vpnsetup_amzn.sh"
   elif [ "$os_type" = "alpine" ]; then
     sh_file="vpnsetup_alpine.sh"
   fi
@@ -275,7 +278,8 @@ run_setup() {
       VPN_DNS_NAME="$VPN_DNS_NAME" VPN_CLIENT_NAME="$VPN_CLIENT_NAME" \
       VPN_PROTECT_CONFIG="$VPN_PROTECT_CONFIG" \
       VPN_CLIENT_VALIDITY="$VPN_CLIENT_VALIDITY" \
-      VPN_SKIP_IKEV2="$VPN_SKIP_IKEV2" \
+      VPN_SKIP_IKEV2="$VPN_SKIP_IKEV2" VPN_SWAN_VER="$VPN_SWAN_VER" \
+      VPN_PUBLIC_IP6="$VPN_PUBLIC_IP6" VPN_IP6_NET="$VPN_IP6_NET" \
       /bin/bash "$tmpdir/vpn.sh" || status=1
     else
       status=1

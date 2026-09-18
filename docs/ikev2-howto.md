@@ -30,7 +30,7 @@ By default, IKEv2 is automatically set up when running the VPN setup script. If 
 * [Android](#android)
 * [Chrome OS (Chromebook)](#chrome-os)
 * [Linux](#linux)
-* [Mikrotik RouterOS](#routeros)
+* [MikroTik RouterOS](#routeros)
 
 <details>
 <summary>
@@ -40,15 +40,13 @@ Learn how to change the IKEv2 server address.
 In certain circumstances, you may need to change the IKEv2 server address. For example, to switch to use a DNS name, or after server IP changes. Learn more in [this section](#change-ikev2-server-address).
 </details>
 
-**Read [:book: VPN book](https://ko-fi.com/post/Support-this-project-and-get-access-to-supporter-o-O5O7FVF8J) to access [extra content](https://ko-fi.com/post/Support-this-project-and-get-access-to-supporter-o-O5O7FVF8J).**
-
 ### Windows 7, 8, 10 and 11
 
 #### Auto-import configuration
 
 [**Screencast:** IKEv2 Auto Import Configuration on Windows](https://ko-fi.com/post/IKEv2-Auto-Import-Configuration-on-Windows-8-10-a-K3K1DQCHW)
 
-**Windows 8, 10 and 11** users can automatically import IKEv2 configuration:
+**Windows 8, 10 and 11+** users can automatically import IKEv2 configuration:
 
 1. Securely transfer the generated `.p12` file to your computer.
 1. Right-click on [ikev2_config_import.cmd](https://github.com/hwdsl2/vpn-extras/releases/latest/download/ikev2_config_import.cmd) and save this helper script to the **same folder** as the `.p12` file.
@@ -59,11 +57,13 @@ To connect to the VPN: Click on the wireless/network icon in your system tray, s
 
 If you get an error when trying to connect, see [Troubleshooting](#ikev2-troubleshooting).
 
+**Note:** If you reinstalled the VPN server, you may want to first remove existing IKEv2 client and CA certificates, then follow the steps above to import the new `.p12` file. This helps make sure that Windows uses the correct client certificate when connecting to the VPN. See "Remove the IKEv2 VPN connection" below for more details.
+
 #### Manually import configuration
 
 [[Supporters] **Screencast:** IKEv2 Manually Import Configuration on Windows](https://ko-fi.com/post/Support-this-project-and-get-access-to-supporter-o-O5O7FVF8J)
 
-Alternatively, **Windows 7, 8, 10 and 11** users can manually import IKEv2 configuration:
+Alternatively, **Windows 7, 8, 10 and 11+** users can manually import IKEv2 configuration:
 
 1. Securely transfer the generated `.p12` file to your computer, then import it into the certificate store.
 
@@ -80,7 +80,7 @@ Alternatively, **Windows 7, 8, 10 and 11** users can manually import IKEv2 confi
 
 1. On the Windows computer, add a new IKEv2 VPN connection.
 
-   For **Windows 8, 10 and 11**, it is recommended to create the VPN connection using the following commands from a command prompt, for improved security and performance.
+   For **Windows 8, 10 and 11+**, it is recommended to create the VPN connection using the following commands from a command prompt, for improved security and performance.
 
    ```console
    # Create VPN connection (replace server address with your own value)
@@ -119,17 +119,16 @@ Remove the IKEv2 VPN connection.
 
 Using the following steps, you can remove the VPN connection and optionally restore the computer to the status before IKEv2 configuration import.
 
-1. Remove the added VPN connection in Windows Settings - Network - VPN. Windows 7 users can remove the VPN connection in Network and Sharing Center - Change adapter settings.
+1. Remove the added VPN connection in Windows Settings -> Network -> VPN. Windows 7 users can remove the VPN connection in Network and Sharing Center -> Change adapter settings.
 
 1. (Optional) Remove IKEv2 certificates.
 
-   1. Press Win+R, or search for `mmc` in the Start Menu. Open *Microsoft Management Console*.
+   1. **Windows 8, 10 and 11:** Press Win+R and enter `certlm.msc`, or search for `certlm.msc` in the Start Menu. Open *Certificates - Local Computer*.   
+      **Windows 7:** Press Win+R and enter `mmc`, or search for `mmc` in the Start Menu. Open *Management Console*. Open `File - Add/Remove Snap-In`. Select to add `Certificates` and in the window that opens, select `Computer account -> Local Computer`. Click on `Finish -> OK` to save the settings.
 
-   1. Open `File - Add/Remove Snap-In`. Select to add `Certificates` and in the window that opens, select `Computer account -> Local Computer`. Click on `Finish -> OK` to save the settings.
+   1. Go to Certificates -> Personal -> Certificates and delete the IKEv2 client certificate. The name of the certificate is the same as the IKEv2 client name you specified (default: `vpnclient`). The certificate was issued by `IKEv2 VPN CA`.
 
-   1. Go to `Certificates - Personal - Certificates` and delete the IKEv2 client certificate. The name of the certificate is the same as the IKEv2 client name you specified (default: `vpnclient`). The certificate was issued by `IKEv2 VPN CA`.
-
-   1. Go to `Certificates - Trusted Root Certification Authorities - Certificates` and delete the IKEv2 VPN CA certificate. The certificate was issued to `IKEv2 VPN CA` by `IKEv2 VPN CA`. Before deleting, make sure that there are no other certificate(s) issued by `IKEv2 VPN CA` in `Certificates - Personal - Certificates`.
+   1. Go to Certificates -> Trusted Root Certification Authorities -> Certificates and delete the IKEv2 VPN CA certificate. The certificate was issued to `IKEv2 VPN CA` by `IKEv2 VPN CA`. Before deleting, make sure that there are no other certificate(s) issued by `IKEv2 VPN CA` in Certificates -> Personal -> Certificates.
 
 1. (Optional. For users who manually created the VPN connection) Restore registry settings. Note that you should backup the registry before editing.
 
@@ -153,7 +152,7 @@ To connect to the VPN:
 
 (Optional feature) Enable **VPN On Demand** to automatically start a VPN connection when your Mac is on Wi-Fi. To enable, check the **Connect on demand** checkbox for the VPN connection, and click **Apply**. To find this setting on macOS Ventura and newer, click on the "i" icon on the right of the VPN connection.
 
-You can customize VPN On Demand rules to exclude certain Wi-Fi network(s) such as your home network. See "Guide: Customize IKEv2 VPN On Demand rules for macOS and iOS" in [:book: Book: Set Up Your Own IPsec VPN, OpenVPN and WireGuard Server](https://ko-fi.com/post/Support-this-project-and-get-access-to-supporter-o-O5O7FVF8J).
+You can customize VPN On Demand rules to exclude certain Wi-Fi networks (such as your home network). For more information, see the chapter "Guide: Customize IKEv2 VPN On Demand rules for macOS and iOS" in [:book: Book: Set Up Your Own IPsec VPN, OpenVPN and WireGuard Server](https://ko-fi.com/post/Support-this-project-and-get-access-to-supporter-o-O5O7FVF8J).
 
 <details>
 <summary>
@@ -217,8 +216,36 @@ To connect to the VPN:
 
 (Optional feature) Enable **VPN On Demand** to automatically start a VPN connection when your iOS device is on Wi-Fi. To enable, tap the "i" icon on the right of the VPN connection, and enable **Connect On Demand**.
 
-You can customize VPN On Demand rules to exclude certain Wi-Fi network(s) such as your home network, or to start the VPN connection both on Wi-Fi and cellular. See "Guide: Customize IKEv2 VPN On Demand rules for macOS and iOS" in [:book: Book: Set Up Your Own IPsec VPN, OpenVPN and WireGuard Server](https://ko-fi.com/post/Support-this-project-and-get-access-to-supporter-o-O5O7FVF8J).
+You can customize VPN On Demand rules to exclude certain Wi-Fi networks (such as your home network). For more information, see the chapter "Guide: Customize IKEv2 VPN On Demand rules for macOS and iOS" in [:book: Book: Set Up Your Own IPsec VPN, OpenVPN and WireGuard Server](https://ko-fi.com/post/Support-this-project-and-get-access-to-supporter-o-O5O7FVF8J).
 
+<details>
+<summary>
+Customize VPN On Demand rules: Connect on Wi-Fi and cellular networks.
+</summary>
+
+The default VPN On Demand configuration only starts a VPN connection on Wi-Fi networks, but not on cellular networks. If you want the VPN to connect on both Wi-Fi and cellular networks:
+
+1. Edit `/opt/src/ikev2.sh` on the VPN server. Find the lines:
+   ```
+     <dict>
+       <key>InterfaceTypeMatch</key>
+       <string>Cellular</string>
+       <key>Action</key>
+       <string>Disconnect</string>
+     </dict>
+   ```
+   and replace "Disconnect" with "Connect":
+   ```
+     <dict>
+       <key>InterfaceTypeMatch</key>
+       <string>Cellular</string>
+       <key>Action</key>
+       <string>Connect</string>
+     </dict>
+   ```
+2. Save the file, then run `sudo ikev2.sh` to export updated client config files for your iOS device(s).
+3. Remove the previously imported VPN profile from your iOS device(s), then import the new `.mobileconfig` file(s) from step 2.
+</details>
 <details>
 <summary>
 If you manually set up IKEv2 without using the helper script, click here for instructions.
@@ -349,7 +376,7 @@ Android 11+ users can also connect using the native IKEv2 client.
 1. Select **IKEv2/IPSec RSA** from the **Type** drop-down menu.
 1. Enter `Your VPN Server IP` (or DNS name) in the **Server address** field.   
    **Note:** This must **exactly match** the server address in the output of the IKEv2 helper script.
-1. Enter anything (e.g. `empty`) in the **IPSec identifier** field.   
+1. Enter anything you like for the **IPSec identifier**.   
    **Note:** This field should not be required. It is a bug in Android.
 1. Select the certificate you imported from the **IPSec user certificate** drop-down menu.
 1. Select the certificate you imported from the **IPSec CA certificate** drop-down menu.
@@ -408,19 +435,37 @@ Before configuring Linux VPN clients, you must make the following change on the 
 
 To configure your Linux computer to connect to IKEv2 as a VPN client, first install the strongSwan plugin for NetworkManager:
 
+#### Ubuntu and Debian
+
 ```bash
-# Ubuntu and Debian
 sudo apt-get update
 sudo apt-get install network-manager-strongswan
+```
 
-# Arch Linux
+#### Arch Linux
+
+```bash
 sudo pacman -Syu  # upgrade all packages
 sudo pacman -S networkmanager-strongswan
+```
 
-# Fedora
-sudo yum install NetworkManager-strongswan-gnome
+#### Fedora
 
-# CentOS
+
+For KDE Plasma/LXQt users:
+
+```bash
+sudo dnf install NetworkManager-strongswan-gnome plasma-nm-strongswan
+```
+Other DEs:
+```bash
+sudo dnf install NetworkManager-strongswan-gnome
+```
+
+
+#### CentOS
+
+```bash
 sudo yum install epel-release
 sudo yum --enablerepo=epel install NetworkManager-strongswan-gnome
 ```
@@ -445,6 +490,81 @@ rm vpnclient.p12
 sudo chown root:root ca.cer client.cer client.key
 sudo chmod 600 ca.cer client.cer client.key
 ```
+>[!IMPORTANT]
+>
+>**_Fedora_** and its derivatives require a few extra steps to setup due to their default security policies.
+><details markdown="1">
+><summary>For <b>Fedora/Nobara 39+</b> clients:</summary>
+><br>
+>
+>
+>## 1. Enable SHA1 Support
+>
+>Fedora 39+ disables SHA-1 cryptographic support by default. Since this VPN setup uses SHA-1 for certificate generation, you need to re-enable it system-wide. Run the following command:
+>
+>```
+>sudo update-crypto-policies --set DEFAULT:SHA1
+>```
+>**<ins>Reboot your system</ins>** after running this command. <br/>
+>    
+>## 2. Set Secure File Ownership
+>
+>Fedora systems require that certificate and key files be owned by root. You can set the correct ownership using the `chown` command.
+>
+>```
+>sudo chown root:root ca.cer client.cer client.key
+>```
+>
+>## 3. Create System Directories
+>
+>Create the official directories where the strongSwan service looks for certificates and private keys.
+>
+>```
+>sudo mkdir -p /etc/ipsec.d/{certs,private}
+>```
+>
+>## 4. Move Files into Place
+>
+>Move the certificate and key files from your current location into the newly created system directories.
+>
+>
+>```
+># Move certificates
+>sudo mv /path/to/ca.cer /path/to/client.cer /etc/ipsec.d/certs/
+>
+># Move private key
+>sudo mv /path/to/client.key /etc/ipsec.d/private/
+>```
+>
+>## 5. Apply SELinux Contexts (If SELinux is Active)
+>    
+>This command updates the security context of the files, ensuring they are correctly labeled for use by the VPN service. It will only run if SELinux is enabled on your system (_à la_ Fedora).
+>
+>```bash
+> bash -c '
+># Check if SELinux is enabled and apply contexts if necessary
+>if command -v sestatus >/dev/null 2>&1 && sestatus | grep -q "SELinux status:.*enabled"; then
+>    sudo restorecon -R -v /etc/ipsec.d/
+>    echo "SELinux contexts applied successfully. Proceed to step 6."
+>else
+>    echo "SELinux not active or not found - skipping context restoration. Proceed to step 6."
+>fi'
+>```
+>
+>## 6. Continue to NetworkManager Setup
+>
+>You are now ready to configure the connection using the graphical editor. Open it with:
+>
+>```
+>sudo nm-connection-editor
+>```
+>Proceed with the general Linux instructions below. When prompted to select certificate and key files during setup, use the files you just transferred to `/etc/ipsec.d/`. (Press **`Ctrl+L`** in the file picker to type the full paths directly.)
+>
+>The paths, for your convenience, are:
+>
+>`/etc/ipsec.d/certs/` & `/etc/ipsec.d/private/`
+></details>
+
 
 You can then set up and enable the VPN connection:
 
@@ -464,7 +584,12 @@ You can then set up and enable the VPN connection:
 1. Click **Add** to save the VPN connection information.
 1. Turn the **VPN** switch ON.
 
-Alternatively, you may connect using the command line. See [#1399](https://github.com/hwdsl2/setup-ipsec-vpn/issues/1399) and [#1007](https://github.com/hwdsl2/setup-ipsec-vpn/issues/1007) for example steps. If you encounter error `Could not find source connection`, edit `/etc/netplan/01-netcfg.yaml` and replace `renderer: networkd` with `renderer: NetworkManager`, then run `sudo netplan apply`. To connect to the VPN, run `sudo nmcli c up VPN`. To disconnect: `sudo nmcli c down VPN`.
+
+>[!TIP]
+> If you're using the KDE Plasma desktop, you might encounter issues when configuring the VPN through the graphical System Settings. To ensure a smooth setup, we recommend launching the dedicated connection editor instead by running `sudo nm-connection-editor` in a terminal.
+
+
+Alternatively, you may connect using the command line. See [#1399](https://github.com/hwdsl2/setup-ipsec-vpn/issues/1399), [#1007](https://github.com/hwdsl2/setup-ipsec-vpn/issues/1007) and [#1789](https://github.com/hwdsl2/setup-ipsec-vpn/issues/1789) for example steps. If you encounter error `Could not find source connection`, edit `/etc/netplan/01-netcfg.yaml` and replace `renderer: networkd` with `renderer: NetworkManager`, then run `sudo netplan apply`. If using `nmcli` to connect to the VPN, run `sudo nmcli c up VPN`. To disconnect: `sudo nmcli c down VPN`.
 
 Once connected, you can verify that your traffic is being routed properly by [looking up your IP address on Google](https://www.google.com/search?q=my+ip). It should say "Your public IP address is `Your VPN Server IP`".
 
@@ -551,6 +676,8 @@ for the entire network, or use `192.168.0.10` for just one device, and so on.
 **See also:** [Check logs and VPN status](clients.md#check-logs-and-vpn-status), [IKEv1 troubleshooting](clients.md#ikev1-troubleshooting) and [Advanced usage](advanced-usage.md).
 
 * [Cannot connect to the VPN server](#cannot-connect-to-the-vpn-server)
+* [IPsec SA errors](#ipsec-sa-errors)
+* [Ubuntu 20.04 cannot import client config](#ubuntu-2004-cannot-import-client-config)
 * [macOS Sonoma clients reconnect](#macos-sonoma-clients-reconnect)
 * [Unable to connect multiple IKEv2 clients](#unable-to-connect-multiple-ikev2-clients)
 * [IKE authentication credentials are unacceptable](#ike-authentication-credentials-are-unacceptable)
@@ -568,52 +695,61 @@ For servers with an external firewall (e.g. [EC2](https://docs.aws.amazon.com/AW
 
 [Check logs and VPN status](clients.md#check-logs-and-vpn-status) for errors. If you encounter retransmission related errors and are unable to connect, there may be network issues between the VPN client and server. If you are connecting from mainland China, consider switching to alternative solutions other than IPsec VPN.
 
+### IPsec SA errors
+
+If Libreswan logs errors such as `Protocol not supported (errno 93)`, `Requested type not found`, `Adding IPsec SA failed`, or `XFRM_MSG_DELPOLICY`, the server may have ESP kernel support disabled.
+
+This has been reported on RHEL 10-based systems where a security mitigation disables `esp4` or `esp6` in modprobe configuration, for example `/etc/modprobe.d/dirtyfrag.conf`. IPsec VPN requires ESP support. Update your kernel/security packages or follow your distribution's guidance before changing these settings, then restart IPsec or re-run the VPN setup script.
+
+### Ubuntu 20.04 cannot import client config
+
+If you installed the IPsec VPN before 2024-04-10, and your VPN server runs Ubuntu Linux version 20.04, you may have encountered an issue where newly generated client configuration files (`.mobileconfig`) fail to import on iOS or macOS device(s) with errors like "incorrect password". This could be caused by updates to libnss3 related packages on Ubuntu 20.04, which required some changes ([25670f3](https://github.com/hwdsl2/setup-ipsec-vpn/commit/25670f3)) in the IKEv2 script.
+
+To fix this issue, first update the IKEv2 script on your server to the latest version using [these instructions](#update-ikev2-helper-script). After that, run `sudo ikev2.sh` and select "export" to re-create the client configuration files.
+
 ### macOS Sonoma clients reconnect
 
 macOS 14 (Sonoma) has [a minor issue](https://github.com/hwdsl2/setup-ipsec-vpn/issues/1486) that may cause IKEv2 VPN to disconnect and reconnect once every 24-48 minutes. Other macOS versions are not affected. First [check your macOS version](https://support.apple.com/en-us/HT201260). To work around this issue, follow the steps below.
 
-**Note:** After applying this workaround, the updated VPN server configuration may not work with Windows or Android clients. For those clients, you may need to change `pfs=yes` back to `pfs=no` in `ikev2.conf`, then run `service ipsec restart` or restart the Docker container.
+**Note:** If you installed IPsec VPN after December 10, 2023, no action is required because the following fixes are already included.
 
-1. Edit `/etc/ipsec.d/ikev2.conf` on the VPN server. First change `pfs=no` to `pfs=yes`. Then find the lines `ike=...` and `phase2alg=...`, and replace them with the following, indented by two spaces:
+1. Edit `/etc/ipsec.d/ikev2.conf` on the VPN server. Find the line:
    ```
-     ike=aes256-sha2_256;dh19,aes256-sha2,aes128-sha2,aes256-sha1,aes128-sha1
-     phase2alg=aes256-sha2_256,aes_gcm-null,aes128-sha1,aes256-sha1,aes128-sha2,aes256-sha2
+     ike=aes256-sha2,aes128-sha2,aes256-sha1,aes128-sha1
+   ```
+   and replace it with the following:
+   ```
+     ike=aes_gcm_c_256-hmac_sha2_256-ecp_256,aes256-sha2,aes128-sha2,aes256-sha1,aes128-sha1
    ```
    **Note:** Docker users should first [open a Bash shell inside the container](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/docs/advanced-usage.md#bash-shell-inside-container).
 1. Save the file and run `service ipsec restart`. Docker users: After step 4 below, `exit` the container and run `docker restart ipsec-vpn-server`.
 1. Edit `/opt/src/ikev2.sh` on the VPN server. Find and replace the following sections with these new values:
    ```
-           <key>ChildSecurityAssociationParameters</key>
-           <dict>
-             <key>DiffieHellmanGroup</key>
-             <integer>19</integer>
-             <key>EncryptionAlgorithm</key>
-             <string>AES-256</string>
-             <key>IntegrityAlgorithm</key>
-             <string>SHA2-256</string>
-             <key>LifeTimeInMinutes</key>
-             <integer>1410</integer>
-           </dict>
+     <key>ChildSecurityAssociationParameters</key>
+     <dict>
+       <key>DiffieHellmanGroup</key>
+       <integer>19</integer>
+       <key>EncryptionAlgorithm</key>
+       <string>AES-256-GCM</string>
+       <key>LifeTimeInMinutes</key>
+       <integer>1410</integer>
+     </dict>
    ```
    ```
-           <key>EnablePFS</key>
-           <integer>1</integer>
+     <key>IKESecurityAssociationParameters</key>
+     <dict>
+       <key>DiffieHellmanGroup</key>
+       <integer>19</integer>
+       <key>EncryptionAlgorithm</key>
+       <string>AES-256-GCM</string>
+       <key>IntegrityAlgorithm</key>
+       <string>SHA2-256</string>
+       <key>LifeTimeInMinutes</key>
+       <integer>1410</integer>
+     </dict>
    ```
-   ```
-           <key>IKESecurityAssociationParameters</key>
-           <dict>
-             <key>DiffieHellmanGroup</key>
-             <integer>19</integer>
-             <key>EncryptionAlgorithm</key>
-             <string>AES-256</string>
-             <key>IntegrityAlgorithm</key>
-             <string>SHA2-256</string>
-             <key>LifeTimeInMinutes</key>
-             <integer>1410</integer>
-           </dict>
-   ```
-1. Run `sudo ikev2.sh` to export (or add) updated client config files for each macOS and iOS (iPhone/iPad) device you have.
-1. Remove the previously imported IKEv2 profile (if any) from your macOS and iOS device(s), then import the updated `.mobileconfig` file(s). See [Configure IKEv2 VPN clients](#configure-ikev2-vpn-clients). Docker users, see [Configure and use IKEv2 VPN](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/README.md#configure-and-use-ikev2-vpn).
+1. Run `sudo ikev2.sh` to export (or add) updated client config files for each macOS device you have.
+1. Remove the previously imported IKEv2 profile (if any) from your macOS device(s), then import the updated `.mobileconfig` file(s). See [Configure IKEv2 VPN clients](#configure-ikev2-vpn-clients). Docker users, see [Configure and use IKEv2 VPN](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/README.md#configure-and-use-ikev2-vpn).
 
 ### Unable to connect multiple IKEv2 clients
 
@@ -882,7 +1018,7 @@ chmod +x /opt/src/ikev2.sh && ln -s /opt/src/ikev2.sh /usr/bin 2>/dev/null
 
 **Note:** By default, IKEv2 is automatically set up when running the VPN setup script. You may skip this section and continue to [configure IKEv2 VPN clients](#configure-ikev2-vpn-clients).
 
-**Important:** Before continuing, you should have successfully [set up your own VPN server](https://github.com/hwdsl2/setup-ipsec-vpn). **Docker users, see [here](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/README.md#configure-and-use-ikev2-vpn)**.
+**Important:** Before continuing, you should have successfully [set up your own VPN server](https://github.com/hwdsl2/setup-ipsec-vpn). Docker users, see [Configure and use IKEv2 VPN](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/README.md#configure-and-use-ikev2-vpn).
 
 Use this [helper script](../extras/ikev2setup.sh) to automatically set up IKEv2 on the VPN server:
 
@@ -956,6 +1092,7 @@ Options:
   --revokeclient [client name]  revoke an existing client
   --deleteclient [client name]  delete an existing client
   --removeikev2                 remove IKEv2 and delete all certificates and keys from the IPsec database
+  -y, --yes                     assume "yes" as answer to prompts when revoking/deleting a client or removing IKEv2
   -h, --help                    show this help message and exit
 
 To customize IKEv2 or client options, run this script without arguments.
@@ -976,8 +1113,8 @@ View example steps for manually configuring IKEv2 with Libreswan.
 1. Find the VPN server's public IP, save it to a variable and check.
 
    ```bash
-   PUBLIC_IP=$(dig @resolver1.opendns.com -t A -4 myip.opendns.com +short)
-   [ -z "$PUBLIC_IP" ] && PUBLIC_IP=$(wget -t 2 -T 10 -qO- http://ipv4.icanhazip.com)
+   PUBLIC_IP=$(wget -t 2 -T 10 -4 --max-redirect=0 -qO- https://ipv4.icanhazip.com) \
+     || PUBLIC_IP=$(wget -t 2 -T 10 -4 --max-redirect=0 -qO- https://api.ipify.org)
    printf '%s\n' "$PUBLIC_IP"
    ```
 
@@ -1014,12 +1151,11 @@ View example steps for manually configuring IKEv2 with Libreswan.
      narrowing=yes
      dpddelay=30
      retransmit-timeout=300s
-     dpdaction=clear
      auto=add
      ikev2=insist
      rekey=no
      pfs=no
-     ike=aes256-sha2,aes128-sha2,aes256-sha1,aes128-sha1
+     ike=aes_gcm_c_256-hmac_sha2_256-ecp_256,aes256-sha2,aes128-sha2,aes256-sha1,aes128-sha1
      phase2alg=aes_gcm-null,aes128-sha1,aes256-sha1,aes128-sha2,aes256-sha2
      ikelifetime=24h
      salifetime=24h
@@ -1249,7 +1385,7 @@ To manually remove IKEv2 from the VPN server, but keep the [IPsec/L2TP](clients.
 
 ## License
 
-Copyright (C) 2016-2023 [Lin Song](https://github.com/hwdsl2) [![View my profile on LinkedIn](https://static.licdn.com/scds/common/u/img/webpromo/btn_viewmy_160x25.png)](https://www.linkedin.com/in/linsongui)   
+Copyright (C) 2016-2026 [Lin Song](https://github.com/hwdsl2) [![View my profile on LinkedIn](https://static.licdn.com/scds/common/u/img/webpromo/btn_viewmy_160x25.png)](https://www.linkedin.com/in/linsongui)   
 
 [![Creative Commons License](https://i.creativecommons.org/l/by-sa/3.0/88x31.png)](http://creativecommons.org/licenses/by-sa/3.0/)   
 This work is licensed under the [Creative Commons Attribution-ShareAlike 3.0 Unported License](http://creativecommons.org/licenses/by-sa/3.0/)  

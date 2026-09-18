@@ -5,9 +5,11 @@
 * [Use alternative DNS servers](#use-alternative-dns-servers)
 * [DNS name and server IP changes](#dns-name-and-server-ip-changes)
 * [IKEv2-only VPN](#ikev2-only-vpn)
+* [Enable IKEv2 perfect forward secrecy](#enable-ikev2-perfect-forward-secrecy)
 * [Internal VPN IPs and traffic](#internal-vpn-ips-and-traffic)
 * [Specify VPN server's public IP](#specify-vpn-servers-public-ip)
 * [Customize VPN subnets](#customize-vpn-subnets)
+* [IPv6 support](#ipv6-support)
 * [Port forwarding to VPN clients](#port-forwarding-to-vpn-clients)
 * [Split tunneling](#split-tunneling)
 * [Access VPN server's subnet](#access-vpn-servers-subnet)
@@ -32,6 +34,10 @@ Below is a list of some popular public DNS providers for your reference.
 | [Control D](https://controld.com/free-dns) | Varies | Varies | Ad blocking, configurable. [Learn more](https://controld.com/free-dns). |
 
 Advanced users can define `VPN_DNS_SRV1` and optionally `VPN_DNS_SRV2` when running the VPN setup script. For more details, see [Customize VPN options](../README.md#customize-vpn-options).
+
+It is possible to set different DNS server(s) for specific IKEv2 client(s). For this use case, please refer to [#1562](https://github.com/hwdsl2/setup-ipsec-vpn/issues/1562#issuecomment-2151361658).
+
+If your use case requires redirecting DNS traffic to another server using IPTables rules, see [#1565](https://github.com/hwdsl2/setup-ipsec-vpn/issues/1565).
 
 In certain circumstances, you may want VPN clients to use the specified DNS server(s) only for resolving internal domain name(s), and use their locally configured DNS servers to resolve all other domain names. This can be configured using the `modecfgdomains` option, e.g. `modecfgdomains="internal.example.com, home"`. Add this option to section `conn ikev2-cp` in `/etc/ipsec.d/ikev2.conf` for IKEv2, and to section `conn xauth-psk` in `/etc/ipsec.conf` for IPsec/XAuth ("Cisco IPsec"). Then run `service ipsec restart`. IPsec/L2TP mode does not support this option.
 
@@ -65,8 +71,44 @@ To disable IKEv2-only mode, run the helper script again and select the appropria
 Alternatively, you may manually enable IKEv2-only mode.
 </summary>
 
-Alternatively, you may manually enable IKEv2-only mode. First check Libreswan version using `ipsec --version`, and [update Libreswan](../README.md#upgrade-libreswan) if needed. Then edit `/etc/ipsec.conf` on the VPN server. Append `ikev1-policy=drop` to the end of the `config setup` section, indented by two spaces. Save the file and run `service ipsec restart`. When finished, you can run `ipsec status` to verify that only the `ikev2-cp` connection is enabled.
+Alternatively, you may manually enable IKEv2-only mode. First check Libreswan version using `ipsec --version`, and [update Libreswan](../README.md#upgrade-libreswan) if needed. Then edit `/etc/ipsec.conf` on the VPN server. Replace `ikev1-policy=accept` with `ikev1-policy=drop`. If the line does not exist, append `ikev1-policy=drop` to the end of the `config setup` section, indented by two spaces. Save the file and run `service ipsec restart`. When finished, you can run `ipsec status` to verify that only the `ikev2-cp` connection is enabled.
 </details>
+
+## Enable IKEv2 perfect forward secrecy
+
+By default, IKEv2 Child SAs derive keying material from the existing IKE SA without a new Diffie-Hellman exchange (`pfs=no`). Enabling perfect forward secrecy (PFS) causes each Child SA rekey to perform a fresh DH exchange, so that a future compromise of the server's private key cannot decrypt previously recorded sessions.
+
+**Note:** The IKE SA already proposes ECP-256 as its first preference (`aes_gcm_c_256-hmac_sha2_256-ecp_256`), and all modern clients negotiate it, so session keys are already independent of the server's long-term private key for those clients. Enabling PFS for Child SAs is an incremental hardening step, not a critical gap.
+
+**Client compatibility:** All modern clients support PFS. However, macOS and iOS clients require re-export and re-import of the `.mobileconfig` profile with `EnablePFS` set to `1` (see below). Windows clients require a connection update. RouterOS users must change `pfs-group=none` to `pfs-group=ecp256` in their IKEv2 profile. Android and Linux strongSwan clients require no changes. Windows 7 IKEv2 clients do not support ECP PFS groups and will fail to connect if PFS is enabled on the server.
+
+To enable PFS on the server, edit `/etc/ipsec.d/ikev2.conf` and change `pfs=no` to `pfs=yes` in the `conn ikev2-cp` section, then restart the IPsec service:
+
+```bash
+sudo sed -i 's/pfs=no/pfs=yes/' /etc/ipsec.d/ikev2.conf
+sudo service ipsec restart
+```
+
+**Docker users:** Open a [Bash shell inside the container](https://github.com/hwdsl2/docker-ipsec-vpn-server/blob/master/docs/advanced-usage.md#bash-shell-inside-container), run the `sed` command above, then `exit` and run `docker restart ipsec-vpn-server`.
+
+After enabling PFS, the following client configurations must be updated:
+
+- **macOS / iOS:** Re-export the client `.mobileconfig` using `sudo ikev2.sh --exportclient <name>`, then edit the exported file to enable PFS:
+  ```bash
+  sed -i '/EnablePFS/{n;s/0/1/;}' <name>.mobileconfig
+  ```
+  Re-import the updated file on your device.
+- **Windows:** In an elevated PowerShell window, run `Set-VpnConnection -Name "Your VPN Name" -PfsGroup ECP256` (replace with your actual VPN connection name), then reconnect the VPN.
+- **RouterOS (MikroTik):** In the IKEv2 peer profile, change `pfs-group=none` to `pfs-group=ecp256`.
+
+Android and Linux strongSwan clients require no changes; PFS is auto-negotiated.
+
+To revert to the default (PFS disabled):
+
+```bash
+sudo sed -i 's/pfs=yes/pfs=no/' /etc/ipsec.d/ikev2.conf
+sudo service ipsec restart
+```
 
 ## Internal VPN IPs and traffic
 
@@ -162,20 +204,26 @@ The example below **ONLY** applies to IKEv2 mode. Commands must be run as `root`
      left=%defaultroute
      ... ...
 
+   conn ikev2-shared
+     # COPY everything from the ikev2-cp section, EXCEPT FOR:
+     # rightid, rightaddresspool, auto=add
+
    conn client1
      rightid=@client1
      rightaddresspool=192.168.43.4-192.168.43.4
-     also=ikev2-cp
+     auto=add
+     also=ikev2-shared
 
    conn client2
      rightid=@client2
      rightaddresspool=192.168.43.5-192.168.43.5
-     also=ikev2-cp
+     auto=add
+     also=ikev2-shared
    ```
 
    **Note:** Add a new `conn` section for each client that you want to assign a static IP to. You must add a `@` prefix to the client name for `rightid=`. The client name must exactly match the name you specified when [adding the client certificate](ikev2-howto.md#add-a-client-certificate). The assigned static IP(s) must be from the subnet `192.168.43.0/24`, and must NOT be from the pool of auto-assigned IPs (see `rightaddresspool` above). In the example above, you can only assign static IP(s) from the range `192.168.43.1-192.168.43.99`.
 
-   **Note:** For Windows 7/8/10/11 clients, you must use a different syntax for `rightid=`. For example, if the client name is `client1`, set `rightid="CN=client1, O=IKEv2 VPN"` in the example above.
+   **Note:** For Windows 7/8/10/11 and [RouterOS](ikev2-howto.md#routeros) clients, you must use a different syntax for `rightid=`. For example, if the client name is `client1`, set `rightid="CN=client1, O=IKEv2 VPN"` in the example above.
 1. **(Important)** Restart the IPsec service:
    ```
    service ipsec restart
@@ -228,11 +276,6 @@ For most use cases, it is NOT necessary and NOT recommended to customize these s
 
 **Important:** You may only specify custom subnets **during initial VPN install**. If the IPsec VPN is already installed, you **must** first [uninstall the VPN](uninstall.md), then specify custom subnets and re-install. Otherwise, the VPN may stop working.
 
-<details>
-<summary>
-First, read the important note above. Then click here for examples.
-</summary>
-
 ```
 # Example: Specify custom VPN subnet for IPsec/L2TP mode
 # Note: All three variables must be specified.
@@ -251,7 +294,55 @@ sh vpn.sh
 ```
 
 In the examples above, `VPN_L2TP_LOCAL` is the VPN server's internal IP for IPsec/L2TP mode. `VPN_L2TP_POOL` and `VPN_XAUTH_POOL` are the pools of auto-assigned IP addresses for VPN clients.
+
+## IPv6 support
+
+If your VPN server has a public (global unicast) IPv6 address and the requirements below are met, IPv6 support for IKEv2 clients is automatically enabled during VPN setup. No manual configuration is needed.
+
+**Note:** IPv6 works without additional configuration when using the strongSwan VPN client on Android. For Windows and macOS clients, follow the platform-specific steps below. iOS clients do not currently support routing IPv6 traffic through the IKEv2 VPN; you may instead use [OpenVPN](https://github.com/hwdsl2/openvpn-install) or [WireGuard](https://github.com/hwdsl2/wireguard-install).
+
+<details>
+<summary>
+Windows: Route IPv6 traffic through the VPN
+</summary>
+
+If you used the `ikev2_config_import.cmd` script to import IKEv2 configuration, you can answer **y** when prompted to automatically add IPv6 routes. Otherwise, run the following commands once in a PowerShell window to route IPv6 traffic through the VPN. Replace `IKEv2 VPN X.X.X.X` with the actual name of your VPN connection. When finished, reconnect to the IKEv2 VPN.
+
+```powershell
+Add-VpnConnectionRoute -ConnectionName "IKEv2 VPN X.X.X.X" -DestinationPrefix ::/1
+Add-VpnConnectionRoute -ConnectionName "IKEv2 VPN X.X.X.X" -DestinationPrefix 8000::/1
+```
 </details>
+<details>
+<summary>
+macOS: Route IPv6 traffic through the VPN
+</summary>
+
+After connecting to the IKEv2 VPN, run the following command in Terminal to route IPv6 traffic through the VPN. This command must be run each time you connect. The route is automatically removed when you disconnect from the VPN. The interface is usually `ipsec0`; if you have multiple VPN connections active it may be `ipsec1`, etc. Run `ifconfig | grep ipsec` to confirm.
+
+```
+sudo route -n add -inet6 default -interface ipsec0
+```
+</details>
+
+When IPv6 is enabled, IKEv2 VPN clients receive both an IPv4 address from the `192.168.43.0/24` pool and an IPv6 address from the `fddd:500:500:500::/64` pool. The VPN server masquerades IPv6 traffic from the client pool through the server's own IPv6 address, giving VPN clients full IPv6 internet access through the tunnel.
+
+**Requirements:**
+- The VPN server must have a routable global unicast IPv6 address (i.e., an address starting with `2` or `3`). Link-local (`fe80::/10`) and ULA (`fc00::/7`) addresses are not sufficient.
+- Libreswan 5.0 or newer (the VPN setup scripts use 5.x by default).
+- IPv6 is only supported for **IKEv2 mode**. IPsec/L2TP and IPsec/XAuth ("Cisco IPsec") modes do not support IPv6.
+
+To verify that IPv6 is working, connect to the VPN using IKEv2 and check your IPv6 address, e.g. using [test-ipv6.com](https://test-ipv6.com).
+
+You may optionally specify a custom IPv6 pool subnet when installing the VPN. The subnet must be a `/64` from the ULA range (`fddd::/16` is recommended).
+
+```
+# Example: Specify custom IPv6 pool subnet for IKEv2 mode
+sudo VPN_IP6_NET=fddd:1234:5678:9012::/64 \
+sh vpn.sh
+```
+
+**Note:** The `VPN_IP6_NET` variable may only be specified during initial VPN install.
 
 ## Port forwarding to VPN clients
 
@@ -281,9 +372,9 @@ If you want the rules to persist after reboot, you may add these commands to `/e
 
 ## Split tunneling
 
-With split tunneling, VPN clients will only send traffic for a specific destination subnet through the VPN tunnel. Other traffic will NOT go through the VPN tunnel. Split tunneling has some limitations, and is not supported by all VPN clients.
+With split tunneling, VPN clients will only send traffic for specific destination subnet(s) through the VPN tunnel. Other traffic will NOT go through the VPN tunnel. This allows you to gain secure access to a network through your VPN, without routing all your client's traffic through the VPN. Split tunneling has some limitations, and is not supported by all VPN clients.
 
-Advanced users can optionally enable split tunneling for the [IPsec/XAuth ("Cisco IPsec")](clients-xauth.md) and/or [IKEv2](ikev2-howto.md) modes. Expand for details. IPsec/L2TP mode does NOT support this feature.
+Advanced users can optionally enable split tunneling for the [IPsec/XAuth ("Cisco IPsec")](clients-xauth.md) and/or [IKEv2](ikev2-howto.md) modes. Expand for details. IPsec/L2TP mode does not support this feature (except on Windows, see below).
 
 <details>
 <summary>
@@ -292,9 +383,14 @@ IPsec/XAuth ("Cisco IPsec") mode: Enable split tunneling
 
 The example below **ONLY** applies to IPsec/XAuth ("Cisco IPsec") mode. Commands must be run as `root`.
 
-1. Edit `/etc/ipsec.conf` on the VPN server. In the section `conn xauth-psk`, replace `leftsubnet=0.0.0.0/0` with the subnet you want VPN clients to send traffic through the VPN tunnel. For example:   
+1. Edit `/etc/ipsec.conf` on the VPN server. In the section `conn xauth-psk`, replace `leftsubnet=0.0.0.0/0` with the subnet(s) you want VPN clients to send traffic through the VPN tunnel. For example:   
+   For a single subnet:
    ```
    leftsubnet=10.123.123.0/24
+   ```
+   For multiple subnets (use `leftsubnets` instead):
+   ```
+   leftsubnets="10.123.123.0/24,10.100.0.0/16"
    ```
 1. **(Important)** Restart the IPsec service:
    ```
@@ -309,9 +405,14 @@ IKEv2 mode: Enable split tunneling
 
 The example below **ONLY** applies to IKEv2 mode. Commands must be run as `root`.
 
-1. Edit `/etc/ipsec.d/ikev2.conf` on the VPN server. In the section `conn ikev2-cp`, replace `leftsubnet=0.0.0.0/0` with the subnet you want VPN clients to send traffic through the VPN tunnel. For example:   
+1. Edit `/etc/ipsec.d/ikev2.conf` on the VPN server. In the section `conn ikev2-cp`, replace `leftsubnet=0.0.0.0/0` with the subnet(s) you want VPN clients to send traffic through the VPN tunnel. For example:   
+   For a single subnet:
    ```
    leftsubnet=10.123.123.0/24
+   ```
+   For multiple subnets (use `leftsubnets` instead):
+   ```
+   leftsubnets="10.123.123.0/24,10.100.0.0/16"
    ```
 1. **(Important)** Restart the IPsec service:
    ```
@@ -320,6 +421,28 @@ The example below **ONLY** applies to IKEv2 mode. Commands must be run as `root`
 
 **Note:** Advanced users can set a different split tunneling configuration for specific IKEv2 client(s). Refer to section [Internal VPN IPs and traffic](#internal-vpn-ips-and-traffic) and expand "IKEv2 mode: Assign static IPs to VPN clients". Based on the example in that section, you may add the `leftsubnet=...` option to the `conn` section of the specific IKEv2 client, then restart the IPsec service.
 </details>
+
+Alternatively, Windows users can enable split tunneling by manually adding routes:
+
+1. Right-click on the wireless/network icon in your system tray.
+1. **Windows 11:** Select **Network and Internet settings**, then on the page that opens, click **Advanced network settings**. Click **More network adapter options**.   
+   **Windows 10:** Select **Open Network & Internet settings**, then on the page that opens, click **Network and Sharing Center**. On the left, click **Change adapter settings**.   
+   **Windows 8/7:** Select **Open Network and Sharing Center**. On the left, click **Change adapter settings**.
+1. Right-click on the new VPN connection, and choose **Properties**.
+1. Click the **Network** tab. Select **Internet Protocol Version 4 (TCP/IPv4)**, then click **Properties**.
+1. Click **Advanced**. Uncheck **Use default gateway on remote network**.
+1. Click **OK** to close the **Properties** window.
+1. **(Important)** Disconnect the VPN, then re-connect.
+1. Assume that the subnet you want VPN clients to send traffic through the VPN tunnel is `10.123.123.0/24`. Open an [elevated command prompt](http://www.winhelponline.com/blog/open-elevated-command-prompt-windows/) and run one of the following commands:   
+   For IKEv2 and IPsec/XAuth ("Cisco IPsec") modes:
+   ```
+   route add -p 10.123.123.0 mask 255.255.255.0 192.168.43.1
+   ```
+   For IPsec/L2TP mode:
+   ```
+   route add -p 10.123.123.0 mask 255.255.255.0 192.168.42.1
+   ```
+1. When finished, VPN clients will send traffic through the VPN tunnel for the specified subnet only. Other traffic will bypass the VPN.
 
 ## Access VPN server's subnet
 
@@ -363,9 +486,11 @@ Learn more about internal VPN IPs in [Internal VPN IPs and traffic](#internal-vp
 
 ## Modify IPTables rules
 
-If you want to modify the IPTables rules after install, edit `/etc/iptables.rules` and/or `/etc/iptables/rules.v4` (Ubuntu/Debian), or `/etc/sysconfig/iptables` (CentOS/RHEL). Then reboot your server.
+If you want to modify IPTables rules after install, edit `/etc/iptables.rules` and/or `/etc/iptables/rules.v4` (Ubuntu/Debian), or `/etc/sysconfig/iptables` (CentOS/RHEL). Then reboot your server.
 
-**Note:** If using Rocky Linux, AlmaLinux, Oracle Linux 8 or CentOS/RHEL 8 and firewalld was active during VPN setup, nftables may be configured. In this case, edit `/etc/sysconfig/nftables.conf` instead of `/etc/sysconfig/iptables`.
+If [IPv6 support](#ipv6-support) is enabled, the corresponding ip6tables rules are saved in `/etc/ip6tables.rules` and `/etc/iptables/rules.v6` (Ubuntu/Debian), or `/etc/sysconfig/ip6tables` (CentOS/RHEL).
+
+**Note:** If your server runs CentOS Linux (or similar), and firewalld was active during VPN setup, nftables may be configured. In this case, edit `/etc/sysconfig/nftables.conf` instead of `/etc/sysconfig/iptables`.
 
 ## Deploy Google BBR congestion control
 
@@ -377,7 +502,7 @@ For detailed deployment methods, please refer to [this document](bbr.md).
 
 ## License
 
-Copyright (C) 2021-2023 [Lin Song](https://github.com/hwdsl2) [![View my profile on LinkedIn](https://static.licdn.com/scds/common/u/img/webpromo/btn_viewmy_160x25.png)](https://www.linkedin.com/in/linsongui)   
+Copyright (C) 2021-2026 [Lin Song](https://github.com/hwdsl2) [![View my profile on LinkedIn](https://static.licdn.com/scds/common/u/img/webpromo/btn_viewmy_160x25.png)](https://www.linkedin.com/in/linsongui)   
 
 [![Creative Commons License](https://i.creativecommons.org/l/by-sa/3.0/88x31.png)](http://creativecommons.org/licenses/by-sa/3.0/)   
 This work is licensed under the [Creative Commons Attribution-ShareAlike 3.0 Unported License](http://creativecommons.org/licenses/by-sa/3.0/)  

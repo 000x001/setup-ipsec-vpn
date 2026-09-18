@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2020-2023 Lin Song <linsongui@gmail.com>
+# Copyright (C) 2020-2026 Lin Song <linsongui@gmail.com>
 #
 # This work is licensed under the Creative Commons Attribution-ShareAlike 3.0
 # Unported License: http://creativecommons.org/licenses/by-sa/3.0/
@@ -9,20 +9,46 @@
 
 name: test_set_1
 
-on: workflow_call
+on:
+  workflow_call:
+    inputs:
+      libreswan_version:
+        required: false
+        type: string
+        default: ''
+      upgrade_from_version:
+        required: false
+        type: string
+        default: '5.3.2'
+      upgrade_to_version:
+        required: false
+        type: string
+        default: '5.4'
+      show_libreswan_build_output:
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 jobs:
   test_set_1:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     if: github.repository_owner == 'hwdsl2'
+    timeout-minutes: 120
     strategy:
       matrix:
-        os_version: ["centos:9s", "centos:8s", "centos:7", "rockylinux:8", "almalinux:9", "almalinux:8", "amazonlinux:2", "oraclelinux:9", "oraclelinux:8", "oraclelinux:7"]
+        os_version: ["centos:10s", "centos:9s", "rockylinux:8", "almalinux:10", "almalinux:9", "almalinux:8", "oraclelinux:10", "oraclelinux:9", "oraclelinux:8"]
       fail-fast: false
     env:
       OS_VERSION: ${{ matrix.os_version }}
+      VPN_SWAN_VER: ${{ inputs.libreswan_version }}
+      TEST_UPGRADE_FROM: ${{ inputs.upgrade_from_version }}
+      TEST_UPGRADE_TO: ${{ inputs.upgrade_to_version }}
+      SHOW_LIBRESWAN_BUILD_OUTPUT: ${{ inputs.show_libreswan_build_output }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Build
@@ -39,6 +65,47 @@ jobs:
           #!/bin/bash
           set -eEx
 
+          version_regex='^([3-9]|[1-9][0-9]{1,2})(\.([0-9]|[1-9][0-9]{1,2})){1,2}$'
+          validate_version() {
+            if ! printf '%s' "$1" | grep -Eq "$version_regex"; then
+              echo "Error: Invalid Libreswan test version." >&2
+              exit 1
+            fi
+          }
+
+          check_swan_version() {
+            expected_version=$1
+            ipsec_ver=$(ipsec --version 2>/dev/null)
+            installed_version=$(printf '%s' "$ipsec_ver" \
+              | sed -e 's/.*Libreswan U\?//' -e 's/\( (\|\/K\).*//')
+            if [ "$installed_version" != "$expected_version" ]; then
+              echo "Error: Expected Libreswan $expected_version, found '$installed_version'." >&2
+              exit 1
+            fi
+          }
+
+          set_setup_version() {
+            [ -z "$VPN_SWAN_VER" ] && return 0
+            sed -i "s/^  SWAN_VER=.*/  SWAN_VER=$VPN_SWAN_VER/" "$1"
+          }
+
+          set_upgrade_ceiling() {
+            sed -i "s/^  swan_ver_cur=.*/  swan_ver_cur=$2/" "$1"
+          }
+
+          enable_build_output() {
+            [ "$SHOW_LIBRESWAN_BUILD_OUTPUT" = true ] || return 0
+            sed -i '/^[[:space:]]*make .* -s base .*&& make -s install-base /s# >/dev/null 2>&1##g' "$1"
+          }
+
+          [ -z "$VPN_SWAN_VER" ] || validate_version "$VPN_SWAN_VER"
+          validate_version "$TEST_UPGRADE_FROM"
+          validate_version "$TEST_UPGRADE_TO"
+          case $SHOW_LIBRESWAN_BUILD_OUTPUT in
+            true|false) ;;
+            *) echo "Error: Invalid build output setting." >&2; exit 1 ;;
+          esac
+
           log1=/var/log/secure
           log2=/var/log/messages
 
@@ -54,11 +121,9 @@ jobs:
             if [ -f /etc/oracle-release ]; then
               sleep 3
             fi
-            if ! command -v amazon-linux-extras; then
-              systemctl restart ipsec
-            fi
+            systemctl restart ipsec
             if grep -qs -i stream /etc/redhat-release \
-              && grep -qs 'release 9' /etc/redhat-release; then
+              && grep -qsE 'release (9|1[0-9])' /etc/redhat-release; then
               sleep 5
               return 0
             fi
@@ -88,32 +153,35 @@ jobs:
           }
 
           cd /opt/src
-          yum -y -q update
+          if grep -qs -i rocky /etc/redhat-release; then
+            yum -y -q update
+          fi
           yum -y -q install wget rsyslog
-          if grep -qs 'release 9' /etc/redhat-release; then
+          if grep -qsE 'release (9|1[0-9])' /etc/redhat-release; then
             if grep -qs -i rocky /etc/redhat-release \
               || grep -qs -i alma /etc/redhat-release; then
               yum -y -q install diffutils
             fi
           fi
           if ! grep -qs -i stream /etc/redhat-release \
-            || ! grep -qs 'release 9' /etc/redhat-release; then
+            || ! grep -qsE 'release (9|1[0-9])' /etc/redhat-release; then
             systemctl start rsyslog
           fi
 
           cp -f /opt/src/scripts/vpnsetup.sh .
           cp -f /opt/src/scripts/extras/vpnuninstall.sh ./vpnunst.sh
-          sed -i -e '/curl /a sed -i "/swan_ver_latest=/s/^/#/" "$tmpdir/vpn.sh"' \
+          sed -i -e '/curl /a sed -i "/swan_ver_latest=/s/^/#/" "$tmpdir/vpn.sh"; [ -z "$VPN_SWAN_VER" ] || sed -i "s/^  SWAN_VER=.*/  SWAN_VER=$VPN_SWAN_VER/" "$tmpdir/vpn.sh"; [ "$SHOW_LIBRESWAN_BUILD_OUTPUT" != true ] || sed -i "/^[[:space:]]*make .* -s base .*&& make -s install-base /s# >/dev/null 2>&1##g" "$tmpdir/vpn.sh"' \
             -e '/curl /a sed -i \x27/status=0/a sed -i "/swan_ver_latest=/s/^/#/" /opt/src/ikev2.sh\x27 "$tmpdir/vpn.sh"' \
             vpnsetup.sh
 
           sh vpnsetup.sh
+          [ -z "$VPN_SWAN_VER" ] || check_swan_version "$VPN_SWAN_VER"
 
           systemctl restart xl2tpd
           restart_ipsec
-          if ! grep -qs 'release 9' /etc/oracle-release; then
+          if ! grep -qsE 'release (9|1[0-9])' /etc/oracle-release; then
             if ! grep -qs -i stream /etc/redhat-release \
-              || ! grep -qs 'release 9' /etc/redhat-release; then
+              || ! grep -qsE 'release (9|1[0-9])' /etc/redhat-release; then
               restart_fail2ban
               cat /var/log/fail2ban.log
             fi
@@ -121,8 +189,9 @@ jobs:
 
           netstat -anpu | grep pluto
           netstat -anpu | grep xl2tpd
-          if grep -qs 'release 9' /etc/redhat-release; then
+          if grep -qsE 'release (9|1[0-9])' /etc/redhat-release; then
             nft list ruleset
+            nft -c -f /etc/sysconfig/nftables.conf
             nft list ruleset | grep -q '192\.168\.42\.0/24'
             nft list ruleset | grep -q '192\.168\.43\.0/24'
           else
@@ -134,7 +203,7 @@ jobs:
             iptables -nvL -t nat | grep -q '192\.168\.43\.0/24'
           fi
           if ! grep -qs -i stream /etc/redhat-release \
-            || ! grep -qs 'release 9' /etc/redhat-release; then
+            || ! grep -qsE 'release (9|1[0-9])' /etc/redhat-release; then
             grep pluto "$log1"
             grep xl2tpd "$log2"
           fi
@@ -159,26 +228,25 @@ jobs:
           ANSWERS
           rm -f /etc/ipsec.d/vpnclient*
           if grep -qs -i stream /etc/redhat-release \
-            || grep -qs -E 'release (8|9)' /etc/oracle-release; then
+            || grep -qsE 'release (8|9|1[0-9])' /etc/oracle-release; then
             mkdir /etc/xl2tpd
           fi
-          if grep -qs 'release 9' /etc/redhat-release; then
+          if grep -qsE 'release (9|1[0-9])' /etc/redhat-release; then
             if grep -qs -i rocky /etc/redhat-release \
               || grep -qs -i alma /etc/redhat-release; then
               mkdir /etc/xl2tpd
             fi
           fi
 
-          if [ "$1" != "amazon" ]; then
-            cp -f /opt/src/scripts/vpnsetup_centos.sh ./vpnsetup.sh
-          else
-            cp -f /opt/src/scripts/vpnsetup_amzn.sh ./vpnsetup.sh
-          fi
+          cp -f /opt/src/scripts/vpnsetup_centos.sh ./vpnsetup.sh
+          set_setup_version vpnsetup.sh
+          enable_build_output vpnsetup.sh
           sed -i -e '/swan_ver_latest=/s/^/#/' \
             -e '/status=0/a sed -i "/swan_ver_latest=/s/^/#/" /opt/src/ikev2.sh' \
             vpnsetup.sh
 
           bash vpnsetup.sh
+          [ -z "$VPN_SWAN_VER" ] || check_swan_version "$VPN_SWAN_VER"
 
           VPN_IPSEC_PSK='your_ipsec_pre_shared_key' \
           VPN_USER='your_vpn_username' \
@@ -192,8 +260,9 @@ jobs:
 
           netstat -anpu | grep pluto
           netstat -anpu | grep xl2tpd
-          if grep -qs 'release 9' /etc/redhat-release; then
+          if grep -qsE 'release (9|1[0-9])' /etc/redhat-release; then
             nft list ruleset
+            nft -c -f /etc/sysconfig/nftables.conf
             nft list ruleset | grep -q '192\.168\.42\.0/24'
             nft list ruleset | grep -q '192\.168\.43\.0/24'
           else
@@ -228,6 +297,118 @@ jobs:
           ls -l /opt/src/addvpnuser.sh
           ls -l /opt/src/delvpnuser.sh
 
+          cp -f /opt/src/scripts/extras/add_vpn_user.sh ./addvpnuser.sh
+          cp -f /opt/src/scripts/extras/del_vpn_user.sh ./delvpnuser.sh
+          chmod 755 /opt/src/addvpnuser.sh /opt/src/delvpnuser.sh
+
+          chap_file=/etc/ppp/chap-secrets
+          passwd_file=/etc/ipsec.d/passwd
+          chap_saved=$(mktemp)
+          passwd_saved=$(mktemp)
+          cp -p "$chap_file" "$chap_saved"
+          cp -p "$passwd_file" "$passwd_saved"
+
+          record_count() {
+            VPN_RECORD_PREFIX=$1 awk '
+              index($0, ENVIRON["VPN_RECORD_PREFIX"]) == 1 { count++ }
+              END { print count + 0 }
+            ' "$2"
+          }
+
+          chap_sum=$(cksum "$chap_file")
+          passwd_sum=$(cksum "$passwd_file")
+          if bash /opt/src/addvpnuser.sh 'invalid:user' 'test-password'; then
+            exit 1
+          fi
+          invalid_user=$(printf 'invalid\nuser')
+          if bash /opt/src/addvpnuser.sh "$invalid_user" 'test-password'; then
+            exit 1
+          fi
+          if bash /opt/src/delvpnuser.sh 'invalid:user'; then
+            exit 1
+          fi
+          if bash /opt/src/delvpnuser.sh "$invalid_user"; then
+            exit 1
+          fi
+          invalid_user=$(printf 'invalid\ruser')
+          if bash /opt/src/addvpnuser.sh "$invalid_user" 'test-password'; then
+            exit 1
+          fi
+          if bash /opt/src/delvpnuser.sh "$invalid_user"; then
+            exit 1
+          fi
+          [ "$chap_sum" = "$(cksum "$chap_file")" ]
+          [ "$passwd_sum" = "$(cksum "$passwd_file")" ]
+
+          printf '\n# VPN user regression marker\n\n' >> "$chap_file"
+          printf '\n# VPN user regression marker\n\n' >> "$passwd_file"
+
+          printf '\n' | bash /opt/src/addvpnuser.sh 'test/user' 'first-pass'
+          [ "$(record_count '"test/user" ' "$chap_file")" = 1 ]
+          [ "$(record_count 'test/user:' "$passwd_file")" = 1 ]
+          printf '\n' | bash /opt/src/addvpnuser.sh 'test/user' 'second-pass'
+          grep -Fqx '"test/user" l2tpd "second-pass" *' "$chap_file"
+          [ "$(record_count '"test/user" ' "$chap_file")" = 1 ]
+          [ "$(record_count 'test/user:' "$passwd_file")" = 1 ]
+          printf '\n' | bash /opt/src/delvpnuser.sh 'test/user'
+          [ "$(record_count '"test/user" ' "$chap_file")" = 0 ]
+          [ "$(record_count 'test/user:' "$passwd_file")" = 0 ]
+
+          regex_user='regex/.*[x]$^+?()@ user'
+          printf '\n' | bash /opt/src/addvpnuser.sh "$regex_user" 'regex-pass'
+          [ "$(record_count "\"$regex_user\" " "$chap_file")" = 1 ]
+          [ "$(record_count "$regex_user:" "$passwd_file")" = 1 ]
+          printf '\n' | bash /opt/src/delvpnuser.sh "$regex_user"
+          [ "$(record_count "\"$regex_user\" " "$chap_file")" = 0 ]
+          [ "$(record_count "$regex_user:" "$passwd_file")" = 0 ]
+
+          printf '\n' | bash /opt/src/addvpnuser.sh 'test123' 'first-pass'
+          printf '\n' | bash /opt/src/addvpnuser.sh 'test.*' 'first-pass'
+          printf '\n' | bash /opt/src/addvpnuser.sh 'test.*' 'second-pass'
+          grep -Fqx '"test123" l2tpd "first-pass" *' "$chap_file"
+          grep -Fqx '"test.*" l2tpd "second-pass" *' "$chap_file"
+          [ "$(record_count 'test123:' "$passwd_file")" = 1 ]
+          [ "$(record_count 'test.*:' "$passwd_file")" = 1 ]
+          printf '\n' | bash /opt/src/delvpnuser.sh 'test.*'
+          [ "$(record_count '"test.*" ' "$chap_file")" = 0 ]
+          [ "$(record_count 'test.*:' "$passwd_file")" = 0 ]
+          grep -Fqx '"test123" l2tpd "first-pass" *' "$chap_file"
+          [ "$(record_count 'test123:' "$passwd_file")" = 1 ]
+
+          chap_sum=$(cksum "$chap_file")
+          passwd_sum=$(cksum "$passwd_file")
+          if bash /opt/src/delvpnuser.sh 'nonexistent/user'; then
+            exit 1
+          fi
+          [ "$chap_sum" = "$(cksum "$chap_file")" ]
+          [ "$passwd_sum" = "$(cksum "$passwd_file")" ]
+          grep -Fqx '# VPN user regression marker' "$chap_file"
+          grep -Fqx '# VPN user regression marker' "$passwd_file"
+          grep -qx '' "$chap_file"
+          grep -qx '' "$passwd_file"
+          [ "$(stat -c %a "$chap_file")" = 600 ]
+          [ "$(stat -c %a "$passwd_file")" = 600 ]
+          [ "$(stat -c %u:%g "$chap_file")" = 0:0 ]
+          [ "$(stat -c %u:%g "$passwd_file")" = 0:0 ]
+          for tmp_file in /etc/ppp/chap-secrets.tmp.* /etc/ipsec.d/passwd.tmp.*; do
+            [ ! -e "$tmp_file" ] || exit 1
+          done
+
+          printf '"only/user" l2tpd "only-pass" *\n' > "$chap_file"
+          printf "only/user:\$6\$only-hash:xauth-psk\n" > "$passwd_file"
+          chmod 600 "$chap_file" "$passwd_file"
+          chap_sum=$(cksum "$chap_file")
+          passwd_sum=$(cksum "$passwd_file")
+          if bash /opt/src/delvpnuser.sh 'only/user'; then
+            exit 1
+          fi
+          [ "$chap_sum" = "$(cksum "$chap_file")" ]
+          [ "$passwd_sum" = "$(cksum "$passwd_file")" ]
+
+          cp -pf "$chap_saved" "$chap_file"
+          cp -pf "$passwd_saved" "$passwd_file"
+          rm -f "$chap_saved" "$passwd_saved"
+
           rm -f /usr/bin/ikev2.sh /opt/src/ikev2.sh
           rm -f /etc/ipsec.d/vpnclient*
 
@@ -259,7 +440,7 @@ jobs:
 
           restart_ipsec
           if ! grep -qs -i stream /etc/redhat-release \
-            || ! grep -qs 'release 9' /etc/redhat-release; then
+            || ! grep -qsE 'release (9|1[0-9])' /etc/redhat-release; then
             grep pluto "$log1" | tail -n 20
           fi
           ipsec status | grep -q ikev2-cp
@@ -516,40 +697,33 @@ jobs:
           ipsec status | grep -q ikev2-cp
 
           cp -f /opt/src/scripts/extras/vpnupgrade.sh ./vpnup.sh
-          sed -i '/curl /a sed -i "/swan_ver_latest=/s/^/#/" "$tmpdir/vpnup.sh"' vpnup.sh
+          sed -i '/curl /a sed -i "/swan_ver_latest=/s/^/#/" "$tmpdir/vpnup.sh"; [ -z "$VPN_SWAN_VER" ] || sed -i "s/^  swan_ver_cur=.*/  swan_ver_cur=$TEST_UPGRADE_FROM/" "$tmpdir/vpnup.sh"; [ "$SHOW_LIBRESWAN_BUILD_OUTPUT" != true ] || sed -i "/^[[:space:]]*make .* -s base .*&& make -s install-base /s# >/dev/null 2>&1##g" "$tmpdir/vpnup.sh"' vpnup.sh
 
-          for ver in 4.10 ""; do
-            sed -i "s/^SWAN_VER=.*/SWAN_VER=$ver/" vpnup.sh
+          ver=$TEST_UPGRADE_FROM
+          sed -i "s/^SWAN_VER=.*/SWAN_VER=$ver/" vpnup.sh
           bash vpnup.sh <<ANSWERS
 
           ANSWERS
-            restart_ipsec
-            [ -z "$ver" ] && ver=4.12
-            ipsec --version | grep "$ver"
-            ipsec status | grep -q l2tp-psk
-            ipsec status | grep -q xauth-psk
-            ipsec status | grep -q ikev2-cp
-          done
+          restart_ipsec
+          check_swan_version "$ver"
+          ipsec status | grep -q l2tp-psk
+          ipsec status | grep -q xauth-psk
+          ipsec status | grep -q ikev2-cp
 
-          if [ "$1" != "amazon" ]; then
-            cp -f /opt/src/scripts/extras/vpnupgrade_centos.sh ./vpnup.sh
-          else
-            cp -f /opt/src/scripts/extras/vpnupgrade_amzn.sh ./vpnup.sh
-          fi
+          cp -f /opt/src/scripts/extras/vpnupgrade_centos.sh ./vpnup.sh
+          set_upgrade_ceiling vpnup.sh "$TEST_UPGRADE_TO"
+          enable_build_output vpnup.sh
           sed -i '/swan_ver_latest=/s/^/#/' vpnup.sh
 
-          for ver in 4.11 ""; do
-            sed -i "s/^SWAN_VER=.*/SWAN_VER=$ver/" vpnup.sh
-          bash vpnup.sh <<ANSWERS
+          ver=$TEST_UPGRADE_TO
+          VPN_UPDATE_SWAN_VER="$ver" bash vpnup.sh <<ANSWERS
 
           ANSWERS
-            restart_ipsec
-            [ -z "$ver" ] && ver=4.12
-            ipsec --version | grep "$ver"
-            ipsec status | grep -q l2tp-psk
-            ipsec status | grep -q xauth-psk
-            ipsec status | grep -q ikev2-cp
-          done
+          restart_ipsec
+          check_swan_version "$ver"
+          ipsec status | grep -q l2tp-psk
+          ipsec status | grep -q xauth-psk
+          ipsec status | grep -q ikev2-cp
 
           bash ikev2.sh --removeikev2 <<ANSWERS
           y
@@ -567,26 +741,23 @@ jobs:
 
           if [ "$OS_VERSION" = "centos:9s" ]; then
             echo "FROM quay.io/centos/centos:stream9" > Dockerfile
-          elif [ "$OS_VERSION" = "centos:8s" ]; then
-            echo "FROM quay.io/centos/centos:stream8" > Dockerfile
+          elif [ "$OS_VERSION" = "centos:10s" ]; then
+            echo "FROM quay.io/centos/centos:stream10" > Dockerfile
           else
             echo "FROM $OS_VERSION" > Dockerfile
           fi
 
           cat >> Dockerfile <<'EOF'
 
-          ENV container docker
+          ENV container=docker
           WORKDIR /opt/src
-
-          RUN if command -v amazon-linux-extras; then amazon-linux-extras install -y kernel-ng; fi
           EOF
 
-          if [ "$OS_VERSION" = "centos:9s" ]; then
+          if [ "$OS_VERSION" = "centos:9s" ] || [ "$OS_VERSION" = "centos:10s" ]; then
             echo "RUN yum -y -q install systemd" >> Dockerfile
           fi
 
           cat >> Dockerfile <<'EOF'
-
           RUN (cd /lib/systemd/system/sysinit.target.wants/; for i in *; do [ "$i" = \
           systemd-tmpfiles-setup.service ] || rm -f "$i"; done); \
           rm -f /lib/systemd/system/multi-user.target.wants/*; \
@@ -611,10 +782,14 @@ jobs:
 
       - name: Test
         run: |
-          docker run -d --name "${OS_VERSION//:}-test-1" -v /sys/fs/cgroup:/sys/fs/cgroup:ro \
-            --privileged "${OS_VERSION//:}-test"
+          docker run -d --name "${OS_VERSION//:}-test-1" -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
+            --cgroupns=host --privileged "${OS_VERSION//:}-test"
           sleep 5
-          docker exec "${OS_VERSION//:}-test-1" /opt/src/run.sh "${OS_VERSION::6}"
+          docker exec --env VPN_SWAN_VER="$VPN_SWAN_VER" \
+            --env TEST_UPGRADE_FROM="$TEST_UPGRADE_FROM" \
+            --env TEST_UPGRADE_TO="$TEST_UPGRADE_TO" \
+            --env SHOW_LIBRESWAN_BUILD_OUTPUT="$SHOW_LIBRESWAN_BUILD_OUTPUT" \
+            "${OS_VERSION//:}-test-1" /opt/src/run.sh "${OS_VERSION::6}"
 
       - name: Clear
         if: always()

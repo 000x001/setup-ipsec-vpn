@@ -5,7 +5,7 @@
 # The latest version of this script is available at:
 # https://github.com/hwdsl2/setup-ipsec-vpn
 #
-# Copyright (C) 2022-2023 Lin Song <linsongui@gmail.com>
+# Copyright (C) 2022-2024 Lin Song <linsongui@gmail.com>
 #
 # This work is licensed under the Creative Commons Attribution-ShareAlike 3.0
 # Unported License: http://creativecommons.org/licenses/by-sa/3.0/
@@ -22,6 +22,20 @@ bigecho() { echo "## $1"; }
 check_ip() {
   IP_REGEX='^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$'
   printf '%s' "$1" | tr -d '\n' | grep -Eq "$IP_REGEX"
+}
+
+get_public_ip() {
+  local ip_addr ip_url
+  for ip_url in https://ipv4.icanhazip.com https://api.ipify.org; do
+    ip_addr=$(wget -t 2 -T 10 -4 --max-redirect=0 -qO- "$ip_url" 2>/dev/null) || continue
+    ip_addr=${ip_addr%$'\r'}
+    [[ "$ip_addr" != *$'\n'* && "$ip_addr" != *$'\r'* ]] || continue
+    if check_ip "$ip_addr"; then
+      public_ip="$ip_addr"
+      return 0
+    fi
+  done
+  return 1
 }
 
 check_dns_name() {
@@ -79,19 +93,6 @@ abort_and_exit() {
   exit 1
 }
 
-confirm_or_abort() {
-  printf '%s' "$1"
-  read -r response
-  case $response in
-    [yY][eE][sS]|[yY])
-      echo
-      ;;
-    *)
-      abort_and_exit
-      ;;
-  esac
-}
-
 check_cert_exists() {
   certutil -L -d sql:/etc/ipsec.d -n "$1" >/dev/null 2>&1
 }
@@ -101,7 +102,7 @@ check_ca_cert_exists() {
 }
 
 get_server_address() {
-  server_addr_old=$(grep -s "leftcert=" /etc/ipsec.d/ikev2.conf | cut -f2 -d=)
+  server_addr_old=$(grep -s "leftcert=" /etc/ipsec.d/ikev2.conf | cut -f2 -d= | head -n 1)
   check_ip "$server_addr_old" || check_dns_name "$server_addr_old" || exiterr "Could not get current VPN server address."
 }
 
@@ -128,9 +129,7 @@ get_server_ip() {
   check_ip "$public_ip" || get_default_ip
   check_ip "$public_ip" && { use_default_ip=1; return 0; }
   bigecho "Trying to auto discover IP of this server..."
-  check_ip "$public_ip" || public_ip=$(dig @resolver1.opendns.com -t A -4 myip.opendns.com +short)
-  check_ip "$public_ip" || public_ip=$(wget -t 2 -T 10 -qO- http://ipv4.icanhazip.com)
-  check_ip "$public_ip" || public_ip=$(wget -t 2 -T 10 -qO- http://ip1.dynupdate.no-ip.com)
+  get_public_ip || public_ip=""
 }
 
 enter_server_address() {

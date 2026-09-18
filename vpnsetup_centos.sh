@@ -8,7 +8,7 @@
 # The latest version of this script is available at:
 # https://github.com/hwdsl2/setup-ipsec-vpn
 #
-# Copyright (C) 2015-2023 Lin Song <linsongui@gmail.com>
+# Copyright (C) 2015-2026 Lin Song <linsongui@gmail.com>
 # Based on the work of Thomas Sarlandie (Copyright 2012)
 #
 # This work is licensed under the Creative Commons Attribution-ShareAlike 3.0
@@ -43,6 +43,25 @@ check_ip() {
   printf '%s' "$1" | tr -d '\n' | grep -Eq "$IP_REGEX"
 }
 
+get_public_ip() {
+  local ip_addr ip_url
+  for ip_url in https://ipv4.icanhazip.com https://api.ipify.org; do
+    ip_addr=$(wget -t 2 -T 10 -4 --max-redirect=0 -qO- "$ip_url" 2>/dev/null) || continue
+    ip_addr=${ip_addr%$'\r'}
+    [[ "$ip_addr" != *$'\n'* && "$ip_addr" != *$'\r'* ]] || continue
+    if check_ip "$ip_addr"; then
+      public_ip="$ip_addr"
+      return 0
+    fi
+  done
+  return 1
+}
+
+check_ip6() {
+  IP6_REGEX='^[0-9a-fA-F]{0,4}(:[0-9a-fA-F]{0,4}){1,7}$'
+  printf '%s' "$1" | tr -d '\n' | grep -Eq "$IP6_REGEX"
+}
+
 check_dns_name() {
   FQDN_REGEX='^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$'
   printf '%s' "$1" | tr -d '\n' | grep -Eq "$FQDN_REGEX"
@@ -71,6 +90,46 @@ EOF
   fi
 }
 
+check_esp_modules() {
+  esp4_conf=""
+  esp6_conf=""
+  esp6_disabled=0
+  install_re='^[[:space:]]*install[[:space:]]+'
+  false_cmd_re='/(usr/)?bin/false([[:space:]]|$)'
+  for mod_dir in /etc/modprobe.d /run/modprobe.d /usr/local/lib/modprobe.d \
+    /usr/lib/modprobe.d /lib/modprobe.d; do
+    [ -d "$mod_dir" ] || continue
+    for mod_conf in "$mod_dir"/*.conf; do
+      [ -f "$mod_conf" ] || continue
+      if [ -z "$esp4_conf" ] \
+        && grep -Eq "${install_re}esp4[[:space:]]+${false_cmd_re}" "$mod_conf"; then
+        esp4_conf="$mod_conf"
+      fi
+      if [ -z "$esp6_conf" ] \
+        && grep -Eq "${install_re}esp6[[:space:]]+${false_cmd_re}" "$mod_conf"; then
+        esp6_conf="$mod_conf"
+      fi
+    done
+  done
+  if [ -n "$esp4_conf" ]; then
+cat 1>&2 <<EOF
+Error: The ESP kernel module 'esp4' appears to be disabled by modprobe config:
+       $esp4_conf
+       IPsec VPN requires ESP support. Update your kernel/security packages
+       or follow your distribution's guidance, then re-run this script.
+EOF
+    exit 1
+  fi
+  if [ -n "$esp6_conf" ]; then
+    esp6_disabled=1
+cat 1>&2 <<EOF
+Warning: The ESP kernel module 'esp6' appears to be disabled by modprobe config:
+         $esp6_conf
+         IKEv2 IPv6 support will be disabled. VPN setup will continue.
+EOF
+  fi
+}
+
 check_os() {
   rh_file="/etc/redhat-release"
   if [ -f "$rh_file" ]; then
@@ -86,14 +145,18 @@ check_os() {
     elif grep -q "release 8" "$rh_file"; then
       os_ver=8
       grep -qi stream "$rh_file" && os_ver=8s
-      if [ "$os_type$os_ver" = "centos8" ]; then
-        exiterr "CentOS Linux 8 is EOL and not supported."
-      fi
     elif grep -q "release 9" "$rh_file"; then
       os_ver=9
       grep -qi stream "$rh_file" && os_ver=9s
+    elif grep -q "release 10" "$rh_file"; then
+      os_ver=10
+      grep -qi stream "$rh_file" && os_ver=10s
     else
-      exiterr "This script only supports CentOS/RHEL 7-9."
+      exiterr "This script only supports CentOS/RHEL 7-10."
+    fi
+    if [ "$os_type" = "centos" ] \
+      && { [ "$os_ver" = 7 ] || [ "$os_ver" = 8 ] || [ "$os_ver" = 8s ]; }; then
+      exiterr "CentOS Linux $os_ver is EOL and not supported."
     fi
   else
 cat 1>&2 <<'EOF'
@@ -199,9 +262,9 @@ install_setup_pkgs() {
   bigecho "Installing packages required for setup..."
   (
     set -x
-    yum -y -q install wget bind-utils openssl tar \
+    yum -y -q install wget ca-certificates bind-utils openssl tar \
       iptables iproute gawk grep sed net-tools >/dev/null \
-    || yum -y -q install wget bind-utils openssl tar \
+    || yum -y -q install wget ca-certificates bind-utils openssl tar \
       iptables iproute gawk grep sed net-tools >/dev/null
   ) || exiterr2
 }
@@ -219,10 +282,21 @@ detect_ip() {
   check_ip "$public_ip" || get_default_ip
   check_ip "$public_ip" && return 0
   bigecho "Trying to auto discover IP of this server..."
-  check_ip "$public_ip" || public_ip=$(dig @resolver1.opendns.com -t A -4 myip.opendns.com +short)
-  check_ip "$public_ip" || public_ip=$(wget -t 2 -T 10 -qO- http://ipv4.icanhazip.com)
-  check_ip "$public_ip" || public_ip=$(wget -t 2 -T 10 -qO- http://ip1.dynupdate.no-ip.com)
-  check_ip "$public_ip" || exiterr "Cannot detect this server's public IP. Define it as variable 'VPN_PUBLIC_IP' and re-run this script."
+  get_public_ip || exiterr "Cannot detect this server's public IP. Define it as variable 'VPN_PUBLIC_IP' and re-run this script."
+}
+
+detect_ipv6() {
+  ip6=""
+  [ "$esp6_disabled" = 1 ] && return 0
+  if ! printf '%s\n%s' "5.0" "$SWAN_VER" | sort -C -V; then
+    return 0
+  fi
+  if [ -n "$VPN_PUBLIC_IP6" ]; then
+    ip6="$VPN_PUBLIC_IP6"
+    check_ip6 "$ip6" || { echo "Warning: Invalid IPv6 address in 'VPN_PUBLIC_IP6'. Detecting IPv6..." >&2; ip6=""; }
+  fi
+  [ -z "$ip6" ] && ip6=$(ip -6 addr 2>/dev/null | awk '/inet6 [23]/ {print $2}' | cut -d'/' -f1 | head -n1)
+  check_ip6 "$ip6" || ip6=""
 }
 
 add_epel_repo() {
@@ -255,6 +329,12 @@ install_vpn_pkgs_1() {
       libcap-ng-devel libselinux-devel curl-devel nss-tools \
       flex bison gcc make util-linux ppp >/dev/null
   ) || exiterr2
+  if [ "$os_ver" != 7 ]; then
+    (
+      set -x
+      yum -y -q install libxcrypt-devel >/dev/null
+    ) || exiterr2
+  fi
 }
 
 install_vpn_pkgs_2() {
@@ -281,6 +361,7 @@ install_vpn_pkgs_3() {
       yum -y -q install $p1 $p2 >/dev/null
     ) || exiterr2
     if [ "$os_ver" = 9 ] || [ "$os_ver" = 9s ] \
+      || [ "$os_ver" = 10 ] || [ "$os_ver" = 10s ] \
       || systemctl is-active --quiet firewalld \
       || systemctl is-active --quiet nftables \
       || grep -qs "hwdsl2 VPN script" /etc/sysconfig/nftables.conf; then
@@ -292,6 +373,79 @@ install_vpn_pkgs_3() {
       yum -y -q install $p4 >/dev/null
     ) || exiterr2
   fi
+}
+
+test_netfilter_support() {
+  if ! iptables-restore --test >/dev/null 2>&1 <<'EOF'
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+-A INPUT -p udp --dport 1701 -m policy --dir in --pol none -j DROP
+-A INPUT -m conntrack --ctstate INVALID -j DROP
+-A INPUT -p udp -m multiport --dports 500,4500 -j ACCEPT
+COMMIT
+*nat
+:PREROUTING ACCEPT [0:0]
+:INPUT ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+-A POSTROUTING -s 192.0.2.0/24 -j MASQUERADE
+COMMIT
+EOF
+  then
+    return 1
+  fi
+  if [ -n "$ip6" ] && ! ip6tables-restore --test >/dev/null 2>&1 <<'EOF'
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+-A INPUT -m conntrack --ctstate INVALID -j DROP
+-A INPUT -p udp -m multiport --dports 500,4500 -j ACCEPT
+COMMIT
+*nat
+:PREROUTING ACCEPT [0:0]
+:INPUT ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+-A POSTROUTING -s 2001:db8::/64 -j MASQUERADE
+COMMIT
+EOF
+  then
+    return 1
+  fi
+  return 0
+}
+
+check_netfilter_support() {
+  if [ "$os_ver" != 10 ] && [ "$os_ver" != 10s ]; then
+    return 0
+  fi
+  test_netfilter_support && return 0
+
+  case "$os_type" in
+    centos|rhel|rocky|alma)
+      # Minimal EL10 images may omit this package for the running kernel.
+      kernel_pkg="kernel-modules-extra-$(uname -r)"
+      bigecho "Installing kernel modules required for the VPN..."
+      (
+        set -x
+        yum -y -q install "$kernel_pkg" >/dev/null
+      ) || :
+      ;;
+  esac
+
+  test_netfilter_support && return 0
+
+cat 1>&2 <<EOF
+Error: Required netfilter kernel modules are unavailable for the running kernel:
+       $(uname -r)
+       Install the matching kernel modules package, or update the kernel and
+       matching modules, reboot, then re-run this script. Custom or provider-
+       specific kernels without these capabilities are not supported.
+EOF
+  exit 1
 }
 
 create_f2b_config() {
@@ -360,7 +514,7 @@ get_helper_scripts() {
 }
 
 get_swan_ver() {
-  SWAN_VER=4.12
+  SWAN_VER=5.4
   base_url="https://github.com/hwdsl2/vpn-extras/releases/download/v1.0.0"
   swan_ver_url="$base_url/v1-$os_type-$os_ver-swanver"
   swan_ver_latest=$(wget -t 2 -T 10 -qO- "$swan_ver_url" | head -n 1)
@@ -368,10 +522,23 @@ get_swan_ver() {
   if printf '%s' "$swan_ver_latest" | grep -Eq '^([3-9]|[1-9][0-9]{1,2})(\.([0-9]|[1-9][0-9]{1,2})){1,2}$'; then
     SWAN_VER="$swan_ver_latest"
   fi
+  if [ -n "$VPN_SWAN_VER" ]; then
+    if ! printf '%s\n%s' "4.15" "$VPN_SWAN_VER" | sort -C -V \
+      || ! printf '%s\n%s' "$VPN_SWAN_VER" "$SWAN_VER" | sort -C -V; then
+cat 1>&2 <<EOF
+Error: Libreswan version '$VPN_SWAN_VER' is not supported.
+       This script can install Libreswan 4.15+ or $SWAN_VER.
+EOF
+      exit 1
+    else
+      SWAN_VER="$VPN_SWAN_VER"
+    fi
+  fi
 }
 
 check_libreswan() {
   check_result=0
+  [ ! -d /etc/ipsec.d ] && { get_swan_ver; return 0; }
   ipsec_ver=$(/usr/local/sbin/ipsec --version 2>/dev/null)
   swan_ver_old=$(printf '%s' "$ipsec_ver" | sed -e 's/.*Libreswan U\?//' -e 's/\( (\|\/K\).*//')
   ipsec_bin="/usr/local/sbin/ipsec"
@@ -412,24 +579,37 @@ install_libreswan() {
 cat > Makefile.inc.local <<'EOF'
 WERROR_CFLAGS=-w -s
 USE_DNSSEC=false
-USE_DH2=true
 USE_NSS_KDF=false
 USE_LINUX_AUDIT=false
 USE_SECCOMP=false
 FINALNSSDIR=/etc/ipsec.d
+NSSDIR=/etc/ipsec.d
 EOF
     if ! grep -qs IFLA_XFRM_LINK /usr/include/linux/if_link.h; then
       echo "USE_XFRM_INTERFACE_IFLA_HEADER=true" >> Makefile.inc.local
+    fi
+    if printf '%s\n%s' "5.4" "$SWAN_VER" | sort -C -V; then
+      if ! grep -qs XFRM_MODE_IPTFS /usr/include/linux/xfrm.h; then
+        echo "USE_XFRM_HEADER_COPY=true" >> Makefile.inc.local
+      fi
+      if ! pkg-config --atleast-version=3.118.1 nss >/dev/null 2>&1; then
+        echo "USE_ML_KEM_768=false" >> Makefile.inc.local
+        echo "USE_ML_KEM_1024=false" >> Makefile.inc.local
+      fi
+      if ! pkg-config --atleast-version=3.99 nss >/dev/null 2>&1; then
+        echo "USE_EDDSA=false" >> Makefile.inc.local
+      fi
     fi
     NPROCS=$(grep -c ^processor /proc/cpuinfo)
     [ -z "$NPROCS" ] && NPROCS=1
     (
       set -x
-      make "-j$((NPROCS+1))" -s base >/dev/null && make -s install-base >/dev/null
+      make "-j$((NPROCS+1))" -s base >/dev/null 2>&1 && make -s install-base >/dev/null 2>&1
     )
     cd /opt/src || exit 1
     /bin/rm -rf "/opt/src/libreswan-$SWAN_VER"
-    if ! /usr/local/sbin/ipsec --version 2>/dev/null | grep -qF "$SWAN_VER"; then
+    if ! /usr/local/sbin/ipsec --version 2>/dev/null | grep -qF "$SWAN_VER" \
+      || [ ! -d /etc/ipsec.d ]; then
       exiterr "Libreswan $SWAN_VER failed to build."
     fi
   fi
@@ -446,13 +626,17 @@ create_vpn_config() {
   DNS_SRV2=${VPN_DNS_SRV2:-'8.8.4.4'}
   DNS_SRVS="\"$DNS_SRV1 $DNS_SRV2\""
   [ -n "$VPN_DNS_SRV1" ] && [ -z "$VPN_DNS_SRV2" ] && DNS_SRVS="$DNS_SRV1"
+  IP6_NET=${VPN_IP6_NET:-'fddd:500:500:500::/64'}
+  vp_ip6=""
+  [ -n "$ip6" ] && vp_ip6=",%v6:fc00::/7,%v6:!$IP6_NET"
   # Create IPsec config
   conf_bk "/etc/ipsec.conf"
 cat > /etc/ipsec.conf <<EOF
 version 2.0
 
 config setup
-  virtual-private=%v4:10.0.0.0/8,%v4:192.168.0.0/16,%v4:172.16.0.0/12,%v4:!$L2TP_NET,%v4:!$XAUTH_NET
+  ikev1-policy=accept
+  virtual-private=%v4:10.0.0.0/8,%v4:192.168.0.0/16,%v4:172.16.0.0/12,%v4:!$L2TP_NET,%v4:!$XAUTH_NET$vp_ip6
   uniqueids=no
 
 conn shared
@@ -463,10 +647,8 @@ conn shared
   authby=secret
   pfs=no
   rekey=no
-  keyingtries=5
   dpddelay=30
   dpdtimeout=300
-  dpdaction=clear
   ikev2=never
   ike=aes256-sha2;modp2048,aes128-sha2;modp2048,aes256-sha1;modp2048,aes128-sha1;modp2048
   phase2alg=aes_gcm-null,aes128-sha1,aes256-sha1,aes256-sha2_512,aes128-sha2,aes256-sha2
@@ -583,6 +765,11 @@ net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
 EOF
     fi
+    if [ -n "$ip6" ]; then
+cat >> /etc/sysctl.conf <<'EOF'
+net.ipv6.conf.all.forwarding = 1
+EOF
+    fi
   fi
 }
 
@@ -603,6 +790,11 @@ update_iptables() {
   if [ "$ipt_flag" = 1 ]; then
     service fail2ban stop >/dev/null 2>&1
     if [ "$use_nft" = 1 ]; then
+      fd_conf=/etc/firewalld/firewalld.conf
+      if grep -qs '^NftablesTableOwner=yes' "$fd_conf"; then
+        sed -i '/NftablesTableOwner/s/yes/no/' "$fd_conf"
+        firewall-cmd --reload >/dev/null 2>&1
+      fi
       nft list ruleset > "$IPT_FILE.old-$SYS_DT"
       chmod 600 "$IPT_FILE.old-$SYS_DT"
     else
@@ -624,8 +816,29 @@ update_iptables() {
     if [ "$use_nft" != 1 ]; then
       iptables -A FORWARD -j DROP
     fi
-    $ipp -s "$XAUTH_NET" -o "$NET_IFACE" -m policy --dir out --pol none -j MASQUERADE
+    if [ "$use_nft" = 1 ]; then
+      $ipp -s "$XAUTH_NET" -o "$NET_IFACE" ! -d "$XAUTH_NET" -j MASQUERADE
+    else
+      $ipp -s "$XAUTH_NET" -o "$NET_IFACE" -m policy --dir out --pol none -j MASQUERADE
+    fi
     $ipp -s "$L2TP_NET" -o "$NET_IFACE" -j MASQUERADE
+    if [ -n "$ip6" ]; then
+      IP6_NET=${VPN_IP6_NET:-'fddd:500:500:500::/64'}
+      ip6ti='ip6tables -I INPUT'
+      ip6tf='ip6tables -I FORWARD'
+      ip6tp='ip6tables -t nat -I POSTROUTING'
+      $ip6ti 1 -m conntrack --ctstate INVALID -j DROP
+      $ip6ti 2 -m conntrack --ctstate "$res" -j ACCEPT
+      $ip6ti 3 -p udp -m multiport --dports 500,4500 -j ACCEPT
+      $ip6tf 1 -m conntrack --ctstate INVALID -j DROP
+      $ip6tf 2 -i "$NET_IFACE" -d "$IP6_NET" -m conntrack --ctstate "$res" -j ACCEPT
+      $ip6tf 3 -s "$IP6_NET" -o "$NET_IFACE" -j ACCEPT
+      if [ "$use_nft" = 1 ]; then
+        $ip6tp -s "$IP6_NET" -o "$NET_IFACE" ! -d "$IP6_NET" -j MASQUERADE
+      else
+        $ip6tp -s "$IP6_NET" -o "$NET_IFACE" -m policy --dir out --pol none -j MASQUERADE
+      fi
+    fi
     echo "# Modified by hwdsl2 VPN script" > "$IPT_FILE"
     if [ "$use_nft" = 1 ]; then
       for vport in 500 4500 1701; do
@@ -642,6 +855,12 @@ update_iptables() {
       nft list ruleset >> "$IPT_FILE"
     else
       iptables-save >> "$IPT_FILE"
+      if [ -n "$ip6" ]; then
+        IPT6_FILE=/etc/sysconfig/ip6tables
+        ip6tables-save > "$IPT6_FILE.old-$SYS_DT"
+        echo "# Modified by hwdsl2 VPN script" > "$IPT6_FILE"
+        ip6tables-save >> "$IPT6_FILE"
+      fi
     fi
   fi
 }
@@ -649,10 +868,16 @@ update_iptables() {
 fix_nss_config() {
   nss_conf="/etc/crypto-policies/back-ends/nss.config"
   if [ -s "$nss_conf" ]; then
-    if ! grep -q ":SHA1:" "$nss_conf" \
-      && ! grep -q " allow=SHA1:" "$nss_conf"; then
-      sed -i "/ALL allow=/s/ allow=/ allow=SHA1:/" "$nss_conf"
+    nss_algs="SHA1"
+    if [ "$os_ver" = 9 ] || [ "$os_ver" = 9s ] \
+      || [ "$os_ver" = 10 ] || [ "$os_ver" = 10s ]; then
+      nss_algs="$nss_algs SHA1/pkcs12-legacy des-ede3-cbc/pkcs12-legacy"
     fi
+    for alg in $nss_algs; do
+      if ! grep -q "[:=]${alg}[:\"]" "$nss_conf"; then
+        sed -i "/ALL allow=/s# allow=# allow=$alg:#" "$nss_conf"
+      fi
+    done
   fi
 }
 
@@ -674,9 +899,7 @@ apply_gcp_mtu_fix() {
 enable_on_boot() {
   bigecho "Enabling services on boot..."
   systemctl --now mask firewalld 2>/dev/null
-  if [ "$os_type$os_ver" = "ol9" ]; then
-    systemctl enable nftables 2>/dev/null
-  elif [ "$use_nft" = 1 ]; then
+  if [ "$use_nft" = 1 ]; then
     systemctl enable nftables 2>/dev/null
     systemctl enable fail2ban 2>/dev/null
   else
@@ -689,13 +912,16 @@ enable_on_boot() {
     else
       echo '#!/bin/sh' > /etc/rc.local
     fi
-cat >> /etc/rc.local <<'EOF'
+    ip6_fwd_rc=""
+    [ -n "$ip6" ] && ip6_fwd_rc='
+echo 1 > /proc/sys/net/ipv6/conf/all/forwarding'
+cat >> /etc/rc.local <<EOF
 
 # Added by hwdsl2 VPN script
 (sleep 15
 service ipsec restart
 service xl2tpd restart
-echo 1 > /proc/sys/net/ipv4/ip_forward)&
+echo 1 > /proc/sys/net/ipv4/ip_forward${ip6_fwd_rc})&
 EOF
   fi
 }
@@ -709,6 +935,13 @@ start_services() {
   restorecon /usr/local/sbin -Rv 2>/dev/null
   restorecon /usr/local/libexec/ipsec -Rv 2>/dev/null
   if [ "$use_nft" = 1 ]; then
+    if ! nft -c -f "$IPT_FILE" >/dev/null 2>&1; then
+      sed -i '/^[[:space:]]*ip6 saddr .*xt target "MASQUERADE"/s/xt target "MASQUERADE"/masquerade/' "$IPT_FILE"
+    fi
+    if ! nft -c -f "$IPT_FILE" >/dev/null 2>&1; then
+      echo "Warning: Failed to validate nftables rules in '$IPT_FILE'." >&2
+      echo "         VPN setup will continue, but nftables may fail to reload after reboot." >&2
+    fi
     nft -f "$IPT_FILE"
   else
     iptables-restore < "$IPT_FILE"
@@ -763,6 +996,7 @@ set_up_ikev2() {
       VPN_DNS_SRV1="$VPN_DNS_SRV1" VPN_DNS_SRV2="$VPN_DNS_SRV2" \
       VPN_PROTECT_CONFIG="$VPN_PROTECT_CONFIG" \
       VPN_CLIENT_VALIDITY="$VPN_CLIENT_VALIDITY" \
+      VPN_PUBLIC_IP6="$ip6" \
       /bin/bash /opt/src/ikev2.sh --auto || status=1
     fi
   elif [ -s /opt/src/ikev2.sh ]; then
@@ -787,6 +1021,7 @@ vpnsetup() {
   check_vz
   check_lxc
   check_os
+  check_esp_modules
   check_iface
   check_creds
   check_dns
@@ -797,13 +1032,13 @@ vpnsetup() {
   start_setup
   install_setup_pkgs
   detect_ip
+  detect_ipv6
   add_epel_repo
   install_vpn_pkgs_1
   install_vpn_pkgs_2
   install_vpn_pkgs_3
-  if [ "$os_type$os_ver" != "ol9" ]; then
-    install_fail2ban
-  fi
+  check_netfilter_support
+  install_fail2ban
   get_helper_scripts
   get_libreswan
   install_libreswan

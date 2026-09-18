@@ -2,7 +2,7 @@
 
 # Configure IPsec/L2TP VPN Clients
 
-After [setting up your own VPN server](https://github.com/hwdsl2/setup-ipsec-vpn), follow these steps to configure your devices. IPsec/L2TP is natively supported by Android, iOS, OS X, and Windows. There is no additional software to install. Setup should only take a few minutes. In case you are unable to connect, first check to make sure the VPN credentials were entered correctly.
+After [setting up your own VPN server](https://github.com/hwdsl2/setup-ipsec-vpn), follow these steps to configure your devices. IPsec/L2TP is natively supported by iOS, OS X, and Windows. Android users should use IKEv2 as described below. There is no additional software to install. Setup should only take a few minutes. In case you are unable to connect, first check to make sure the VPN credentials were entered correctly.
 
 ---
 * Platforms
@@ -161,34 +161,7 @@ If you get an error when trying to connect, see [Troubleshooting](#ikev1-trouble
 
 ## Android
 
-**Important:** Android users should instead connect using [IKEv2 mode](ikev2-howto.md) (recommended), which is more secure. Android 12+ only supports IKEv2 mode. The native VPN client in Android uses the less secure `modp1024` (DH group 2) for the IPsec/L2TP and IPsec/XAuth ("Cisco IPsec") modes.
-
-If you still want to connect using IPsec/L2TP mode, you must first edit `/etc/ipsec.conf` on the VPN server. Find the line `ike=...` and append `,aes256-sha2;modp1024,aes128-sha1;modp1024` at the end. Save the file and run `service ipsec restart`.
-
-Docker users: Add `VPN_ENABLE_MODP1024=yes` to [your env file](https://github.com/hwdsl2/docker-ipsec-vpn-server#how-to-use-this-image), then re-create the Docker container.
-
-After that, follow the steps below on your Android device:
-
-1. Launch the **Settings** application.
-1. Tap "Network & internet". Or, if using Android 7 or earlier, tap **More...** in the **Wireless & networks** section.
-1. Tap **VPN**.
-1. Tap **Add VPN Profile** or the **+** icon at top-right of screen.
-1. Enter anything you like in the **Name** field.
-1. Select **L2TP/IPSec PSK** in the **Type** drop-down menu.
-1. Enter `Your VPN Server IP` in the **Server address** field.
-1. Leave the **L2TP secret** field blank.
-1. Leave the **IPSec identifier** field blank.
-1. Enter `Your VPN IPsec PSK` in the **IPSec pre-shared key** field.
-1. Tap **Save**.
-1. Tap the new VPN connection.
-1. Enter `Your VPN Username` in the **Username** field.
-1. Enter `Your VPN Password` in the **Password** field.
-1. Check the **Save account information** checkbox.
-1. Tap **Connect**.
-
-Once connected, you will see a VPN icon in the notification bar. You can verify that your traffic is being routed properly by [looking up your IP address on Google](https://www.google.com/search?q=my+ip). It should say "Your public IP address is `Your VPN Server IP`".
-
-If you get an error when trying to connect, see [Troubleshooting](#ikev1-troubleshooting).
+Android users should connect using [IKEv2 mode](ikev2-howto.md) (recommended), which is more secure. The native VPN client in Android uses the less secure `modp1024` (DH group 2) for the IPsec/L2TP and IPsec/XAuth ("Cisco IPsec") modes. Libreswan builds installed by this project no longer support this DH group. Android 12+ also only supports IKEv2 mode.
 
 ## iOS
 
@@ -376,7 +349,7 @@ Restart services:
 ```bash
 service strongswan restart
 
-# For Ubuntu 20.04, if strongswan service not found
+# For Ubuntu, if strongswan service not found
 ipsec restart
 
 service xl2tpd restart
@@ -429,7 +402,7 @@ route add default dev ppp0
 The VPN connection is now complete. Verify that your traffic is being routed properly:
 
 ```bash
-wget -qO- http://ipv4.icanhazip.com; echo
+wget -qO- https://ipv4.icanhazip.com; echo
 ```
 
 The above command should return `Your VPN Server IP`.
@@ -494,7 +467,7 @@ Check the Libreswan (IPsec) and xl2tpd logs for errors:
 grep pluto /var/log/auth.log
 grep xl2tpd /var/log/syslog
 
-# CentOS/RHEL, Rocky Linux, AlmaLinux, Oracle Linux & Amazon Linux 2
+# CentOS/RHEL, Rocky Linux, AlmaLinux & Oracle Linux
 grep pluto /var/log/secure
 grep xl2tpd /var/log/messages
 
@@ -502,6 +475,8 @@ grep xl2tpd /var/log/messages
 grep pluto /var/log/messages
 grep xl2tpd /var/log/messages
 ```
+
+If Libreswan logs errors such as `Protocol not supported (errno 93)` or `Adding IPsec SA failed`, see [IPsec SA errors](ikev2-howto.md#ipsec-sa-errors).
 
 Check the status of the IPsec VPN server:
 
@@ -521,7 +496,7 @@ ipsec trafficstatus
 
 **Note:** The registry change below is only required if you use IPsec/L2TP mode to connect to the VPN. It is NOT required for the [IKEv2](ikev2-howto.md) and [IPsec/XAuth](clients-xauth.md) modes.
 
-To fix this error, a [one-time registry change](https://documentation.meraki.com/MX-Z/Client_VPN/Troubleshooting_Client_VPN#Windows_Error_809) is required because the VPN server and/or client is behind NAT (e.g. home router). Download and import the `.reg` file below, or run the following from an [elevated command prompt](http://www.winhelponline.com/blog/open-elevated-command-prompt-windows/). **You must reboot your PC when finished.**
+To fix this error, a one-time registry change is required because the VPN server and/or client is behind NAT (e.g. home router). Download and import the `.reg` file below, or run the following from an [elevated command prompt](http://www.winhelponline.com/blog/open-elevated-command-prompt-windows/). **You must reboot your PC when finished.**
 
 - For Windows Vista, 7, 8, 10 and 11 ([download .reg file](https://github.com/hwdsl2/vpn-extras/releases/download/v1.0.0/Fix_VPN_Error_809_Windows_Vista_7_8_10_Reboot_Required.reg))
 
@@ -549,7 +524,7 @@ Although uncommon, some Windows systems disable IPsec encryption, causing the co
 
 > Error 691: The remote connection was denied because the user name and password combination you provided is not recognized, or the selected authentication protocol is not permitted on the remote access server.
 
-For error 789, click [here](https://documentation.meraki.com/MX/Client_VPN/Troubleshooting_Client_VPN#Windows_Error_789) for troubleshooting information. For error 691, you may try removing and recreating the VPN connection, by following the instructions in this document. Make sure that the VPN credentials are entered correctly.
+For error 789, click [here](https://documentation.meraki.com/MX/Client_VPN/Guided_Client_VPN_Troubleshooting/Unable_to_Connect_to_Client_VPN_from_Some_Devices) for troubleshooting information. For error 691, you may try removing and recreating the VPN connection, by following the instructions in this document. Make sure that the VPN credentials are entered correctly.
 
 ### Windows error 628 or 766
 
@@ -560,8 +535,10 @@ For error 789, click [here](https://documentation.meraki.com/MX/Client_VPN/Troub
 To fix these errors, please follow these steps:
 
 1. Right-click on the wireless/network icon in your system tray.
-1. Select **Open Network and Sharing Center**. Or, if using Windows 10 version 1709 or newer, select **Open Network & Internet settings**, then on the page that opens, click **Network and Sharing Center**.
-1. On the left, click **Change adapter settings**. Right-click on the new VPN and choose **Properties**.
+1. **Windows 11:** Select **Network and Internet settings**, then on the page that opens, click **Advanced network settings**. Click **More network adapter options**.   
+   **Windows 10:** Select **Open Network & Internet settings**, then on the page that opens, click **Network and Sharing Center**. On the left, click **Change adapter settings**.   
+   **Windows 8/7:** Select **Open Network and Sharing Center**. On the left, click **Change adapter settings**.
+1. Right-click on the new VPN connection, and choose **Properties**.
 1. Click the **Security** tab. Select "Layer 2 Tunneling Protocol with IPsec (L2TP/IPSec)" for **Type of VPN**.
 1. Click **Allow these protocols**. Check the "Challenge Handshake Authentication Protocol (CHAP)" and "Microsoft CHAP Version 2 (MS-CHAP v2)" checkboxes.
 1. Click the **Advanced settings** button.
@@ -583,9 +560,11 @@ After upgrading Windows 10/11 version (e.g. from 21H2 to 22H2), you may need to 
 
 ### Windows DNS leaks and IPv6
 
-Windows 8, 10 and 11 use "smart multi-homed name resolution" by default, which may cause "DNS leaks" when using the native IPsec VPN client if your DNS servers on the Internet adapter are from the local network segment. To fix, you may either [disable smart multi-homed name resolution](https://www.neowin.net/news/guide-prevent-dns-leakage-while-using-a-vpn-on-windows-10-and-windows-8/), or configure your Internet adapter to use DNS servers outside your local network (e.g. 8.8.8.8 and 8.8.4.4). When finished, [clear the DNS cache](https://support.opendns.com/hc/en-us/articles/227988627-How-to-clear-the-DNS-Cache-) and reboot your PC.
+Windows 8, 10 and 11 use "smart multi-homed name resolution" by default, which may cause "DNS leaks" when using the native IPsec VPN client if your DNS servers on the Internet adapter are from the local network segment. To fix, you may either [disable smart multi-homed name resolution](https://www.neowin.net/news/guide-prevent-dns-leakage-while-using-a-vpn-on-windows-10-and-windows-8/), or configure your Internet adapter to use DNS servers outside your local network (e.g. 8.8.8.8 and 8.8.4.4). When finished, reboot your PC.
 
-In addition, if your computer has IPv6 enabled, all IPv6 traffic (including DNS queries) will bypass the VPN. Learn how to [disable IPv6](https://support.microsoft.com/en-us/help/929852/guidance-for-configuring-ipv6-in-windows-for-advanced-users) in Windows. If you need a VPN with IPv6 support, you could instead try [OpenVPN](https://github.com/hwdsl2/openvpn-install).
+In addition, if your computer has IPv6 enabled, all IPv6 traffic (including DNS queries) will bypass the VPN. Learn how to [disable IPv6](https://support.microsoft.com/en-us/help/929852/guidance-for-configuring-ipv6-in-windows-for-advanced-users) in Windows.
+
+If you need IPv6 support through the VPN, try [IKEv2 mode](ikev2-howto.md) (see [IPv6 support](advanced-usage.md#ipv6-support), requires a VPN server with a public IPv6 address), or try [OpenVPN](https://github.com/hwdsl2/openvpn-install) or [WireGuard](https://github.com/hwdsl2/wireguard-install).
 
 ### Android/Linux MTU/MSS issues
 
@@ -641,7 +620,7 @@ To fix the issue with IPsec/L2TP mode, you may switch to the standard Linux kern
 
 Note: This license applies to this document only.
 
-Copyright (C) 2016-2023 [Lin Song](https://github.com/hwdsl2) [![View my profile on LinkedIn](https://static.licdn.com/scds/common/u/img/webpromo/btn_viewmy_160x25.png)](https://www.linkedin.com/in/linsongui)   
+Copyright (C) 2016-2026 [Lin Song](https://github.com/hwdsl2) [![View my profile on LinkedIn](https://static.licdn.com/scds/common/u/img/webpromo/btn_viewmy_160x25.png)](https://www.linkedin.com/in/linsongui)   
 Inspired by [the work of Joshua Lund](https://github.com/StreisandEffect/streisand/blob/6aa6b6b2735dd829ca8c417d72eb2768a89b6639/playbooks/roles/l2tp-ipsec/templates/instructions.md.j2)
 
 This program is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License](https://www.gnu.org/licenses/gpl.html) as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.

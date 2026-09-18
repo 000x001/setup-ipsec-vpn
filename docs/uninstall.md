@@ -66,7 +66,7 @@ rm -f /etc/init/ipsec.conf /lib/systemd/system/ipsec.service /etc/init.d/ipsec \
 
 `apt-get purge xl2tpd`
 
-#### CentOS/RHEL, Rocky Linux, AlmaLinux, Oracle Linux & Amazon Linux 2
+#### CentOS/RHEL, Rocky Linux, AlmaLinux & Oracle Linux
 
 `yum remove xl2tpd`
 
@@ -78,11 +78,15 @@ rm -f /etc/init/ipsec.conf /lib/systemd/system/ipsec.service /etc/init.d/ipsec \
 
 #### Ubuntu, Debian & Alpine Linux
 
-Edit `/etc/iptables.rules` and remove unneeded rules. Your original rules (if any) are backed up as `/etc/iptables.rules.old-date-time`. In addition, edit `/etc/iptables/rules.v4` if the file exists.   
+Edit `/etc/iptables.rules` and remove unneeded rules. Your original rules (if any) are backed up as `/etc/iptables.rules.old-date-time`. In addition, edit `/etc/iptables/rules.v4` if the file exists.
 
-#### CentOS/RHEL, Rocky Linux, AlmaLinux, Oracle Linux & Amazon Linux 2
+If IPv6 support was enabled, also edit `/etc/ip6tables.rules` and `/etc/iptables/rules.v6` (if it exists) and remove unneeded rules.
+
+#### CentOS/RHEL, Rocky Linux, AlmaLinux & Oracle Linux
 
 Edit `/etc/sysconfig/iptables` and remove unneeded rules. Your original rules (if any) are backed up as `/etc/sysconfig/iptables.old-date-time`.
+
+If IPv6 support was enabled, also edit `/etc/sysconfig/ip6tables` and remove unneeded rules.
 
 **Note:** If using Rocky Linux, AlmaLinux, Oracle Linux 8 or CentOS/RHEL 8 and firewalld was active during VPN setup, nftables may be configured. Edit `/etc/sysconfig/nftables.conf` and remove unneeded rules. Your original rules are backed up as `/etc/sysconfig/nftables.conf.old-date-time`.
 
@@ -131,7 +135,7 @@ Remove fail2ban:
 service fail2ban stop
 # Ubuntu & Debian
 apt-get purge fail2ban
-# CentOS/RHEL, Rocky Linux, AlmaLinux, Oracle Linux & Amazon Linux 2
+# CentOS/RHEL, Rocky Linux, AlmaLinux & Oracle Linux
 yum remove fail2ban
 # Alpine Linux
 apk del fail2ban
@@ -143,7 +147,7 @@ Reboot your server.
 
 ## License
 
-Copyright (C) 2016-2023 [Lin Song](https://github.com/hwdsl2) [![View my profile on LinkedIn](https://static.licdn.com/scds/common/u/img/webpromo/btn_viewmy_160x25.png)](https://www.linkedin.com/in/linsongui)   
+Copyright (C) 2016-2026 [Lin Song](https://github.com/hwdsl2) [![View my profile on LinkedIn](https://static.licdn.com/scds/common/u/img/webpromo/btn_viewmy_160x25.png)](https://www.linkedin.com/in/linsongui)   
 
 [![Creative Commons License](https://i.creativecommons.org/l/by-sa/3.0/88x31.png)](http://creativecommons.org/licenses/by-sa/3.0/)   
 This work is licensed under the [Creative Commons Attribution-ShareAlike 3.0 Unported License](http://creativecommons.org/licenses/by-sa/3.0/)  

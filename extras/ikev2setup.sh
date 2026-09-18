@@ -1,14 +1,14 @@
 #!/bin/bash
 #
 # Script to set up and manage IKEv2 on Ubuntu, Debian, CentOS/RHEL, Rocky Linux,
-# AlmaLinux, Oracle Linux, Amazon Linux 2 and Alpine Linux
+# AlmaLinux, Oracle Linux and Alpine Linux
 #
 # DO NOT RUN THIS SCRIPT ON YOUR PC OR MAC!
 #
 # The latest version of this script is available at:
 # https://github.com/hwdsl2/setup-ipsec-vpn
 #
-# Copyright (C) 2020-2023 Lin Song <linsongui@gmail.com>
+# Copyright (C) 2020-2026 Lin Song <linsongui@gmail.com>
 #
 # This work is licensed under the Creative Commons Attribution-ShareAlike 3.0
 # Unported License: http://creativecommons.org/licenses/by-sa/3.0/
@@ -25,6 +25,20 @@ bigecho2() { printf '\e[2K\r%s' "## $1"; }
 check_ip() {
   IP_REGEX='^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$'
   printf '%s' "$1" | tr -d '\n' | grep -Eq "$IP_REGEX"
+}
+
+get_public_ip() {
+  local ip_addr ip_url
+  for ip_url in https://ipv4.icanhazip.com https://api.ipify.org; do
+    ip_addr=$(wget -t 2 -T 10 -4 --max-redirect=0 -qO- "$ip_url" 2>/dev/null) || continue
+    ip_addr=${ip_addr%$'\r'}
+    [[ "$ip_addr" != *$'\n'* && "$ip_addr" != *$'\r'* ]] || continue
+    if check_ip "$ip_addr"; then
+      public_ip="$ip_addr"
+      return 0
+    fi
+  done
+  return 1
 }
 
 check_dns_name() {
@@ -63,12 +77,18 @@ check_os() {
     elif grep -q "release 9" "$rh_file"; then
       os_ver=9
       grep -qi stream "$rh_file" && os_ver=9s
+    elif grep -q "release 10" "$rh_file"; then
+      os_ver=10
+      grep -qi stream "$rh_file" && os_ver=10s
     else
-      exiterr "This script only supports CentOS/RHEL 7-9."
+      exiterr "This script only supports CentOS/RHEL 7-10."
+    fi
+    if [ "$os_type" = "centos" ] \
+      && { [ "$os_ver" = 7 ] || [ "$os_ver" = 8 ] || [ "$os_ver" = 8s ]; }; then
+      exiterr "CentOS Linux $os_ver is EOL and not supported."
     fi
   elif grep -qs "Amazon Linux release 2 " /etc/system-release; then
-    os_type=amzn
-    os_ver=2
+    exiterr "Amazon Linux 2 has reached end of support and is no longer supported by this project. Please migrate to a currently supported operating system."
   else
     os_type=$(lsb_release -si 2>/dev/null)
     [ -z "$os_type" ] && [ -f /etc/os-release ] && os_type=$(. /etc/os-release && printf '%s' "$ID")
@@ -89,18 +109,23 @@ check_os() {
 cat 1>&2 <<'EOF'
 Error: This script only supports one of the following OS:
        Ubuntu, Debian, CentOS/RHEL, Rocky Linux, AlmaLinux,
-       Oracle Linux, Amazon Linux 2 or Alpine Linux
+       Oracle Linux or Alpine Linux
 EOF
         exit 1
         ;;
     esac
     if [ "$os_type" = "alpine" ]; then
       os_ver=$(. /etc/os-release && printf '%s' "$VERSION_ID" | cut -d '.' -f 1,2)
-      if [ "$os_ver" != "3.17" ] && [ "$os_ver" != "3.18" ]; then
-        exiterr "This script only supports Alpine Linux 3.17/3.18."
-      fi
     else
       os_ver=$(sed 's/\..*//' /etc/debian_version | tr -dc 'A-Za-z0-9')
+      if [ "$os_ver" = 8 ] || [ "$os_ver" = 9 ] || [ "$os_ver" = "stretchsid" ] \
+        || [ "$os_ver" = "bustersid" ] || [ -z "$os_ver" ]; then
+cat 1>&2 <<EOF
+Error: This script requires Debian >= 10 or Ubuntu >= 20.04.
+       This version of Ubuntu/Debian is too old and not supported.
+EOF
+        exit 1
+      fi
     fi
   fi
 }
@@ -157,7 +182,7 @@ confirm_or_abort() {
 show_header() {
 cat <<'EOF'
 
-IKEv2 Script   Copyright (c) 2020-2023 Lin Song   11 Aug 2023
+IKEv2 Script   Copyright (c) 2020-2026 Lin Song   6 Sep 2026
 
 EOF
 }
@@ -178,6 +203,7 @@ Options:
   --revokeclient [client name]  revoke an existing client
   --deleteclient [client name]  delete an existing client
   --removeikev2                 remove IKEv2 and delete all certificates and keys from the IPsec database
+  -y, --yes                     assume "yes" as answer to prompts when revoking/deleting a client or removing IKEv2
   -h, --help                    show this help message and exit
 
 To customize IKEv2 or client options, run this script without arguments.
@@ -401,14 +427,12 @@ get_server_ip() {
   check_ip "$public_ip" || get_default_ip
   check_ip "$public_ip" && { use_default_ip=1; return 0; }
   bigecho2 "Trying to auto discover IP of this server..."
-  check_ip "$public_ip" || public_ip=$(dig @resolver1.opendns.com -t A -4 myip.opendns.com +short)
-  check_ip "$public_ip" || public_ip=$(wget -t 2 -T 10 -qO- http://ipv4.icanhazip.com)
-  check_ip "$public_ip" || public_ip=$(wget -t 2 -T 10 -qO- http://ip1.dynupdate.no-ip.com)
+  get_public_ip || public_ip=""
 }
 
 get_server_address() {
-  server_addr=$(grep -s "leftcert=" "$IKEV2_CONF" | cut -f2 -d=)
-  [ -z "$server_addr" ] && server_addr=$(grep -s "leftcert=" "$IPSEC_CONF" | cut -f2 -d=)
+  server_addr=$(grep -s "leftcert=" "$IKEV2_CONF" | cut -f2 -d= | head -n 1)
+  [ -z "$server_addr" ] && server_addr=$(grep -s "leftcert=" "$IPSEC_CONF" | cut -f2 -d= | head -n 1)
   check_ip "$server_addr" || check_dns_name "$server_addr" || exiterr "Could not get VPN server address."
 }
 
@@ -819,7 +843,7 @@ export_p12_file() {
         -legacy -name "$client_name" -passin "pass:$p12_password" -passout pass: || exit 1
     fi
     /bin/rm -f "$pem_file"
-  elif [ "$os_type" = "alpine" ] || [ "$os_ver" = "kalirolling" ] || [ "$os_type$os_ver" = "ubuntu11" ]; then
+  elif [ "$os_type" = "alpine" ] || [ "$os_ver" = "kalirolling" ] || [ "$os_ver" = "bullseyesid" ]; then
     pem_file="$export_dir$client_name.temp.pem"
     openssl pkcs12 -in "$p12_file_enc" -out "$pem_file" -passin "pass:$p12_password" -passout "pass:$p12_password" || exit 1
     openssl pkcs12 -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -export -in "$pem_file" -out "$p12_file_enc" \
@@ -872,6 +896,20 @@ install_uuidgen() {
   fi
 }
 
+update_ikev2_conf() {
+  if grep -qs 'ike=aes256-sha2,aes128-sha2,aes256-sha1,aes128-sha1$' "$IKEV2_CONF"; then
+    bigecho2 "Updating IKEv2 configuration..."
+    sed -i \
+      "/ike=aes256-sha2,aes128-sha2,aes256-sha1,aes128-sha1$/s/ike=/ike=aes_gcm_c_256-hmac_sha2_256-ecp_256,/" \
+      "$IKEV2_CONF"
+    if [ "$os_type" = "alpine" ]; then
+      ipsec auto --add ikev2-cp >/dev/null
+    else
+      restart_ipsec_service >/dev/null
+    fi
+  fi
+}
+
 create_mobileconfig() {
   [ -z "$server_addr" ] && get_server_address
   p12_file_enc="$export_dir$client_name.enc.p12"
@@ -898,9 +936,9 @@ cat > "$mc_file" <<EOF
         <key>ChildSecurityAssociationParameters</key>
         <dict>
           <key>DiffieHellmanGroup</key>
-          <integer>14</integer>
+          <integer>19</integer>
           <key>EncryptionAlgorithm</key>
-          <string>AES-128-GCM</string>
+          <string>AES-256-GCM</string>
           <key>LifeTimeInMinutes</key>
           <integer>1410</integer>
         </dict>
@@ -915,9 +953,9 @@ cat > "$mc_file" <<EOF
         <key>IKESecurityAssociationParameters</key>
         <dict>
           <key>DiffieHellmanGroup</key>
-          <integer>14</integer>
+          <integer>19</integer>
           <key>EncryptionAlgorithm</key>
-          <string>AES-256</string>
+          <string>AES-256-GCM</string>
           <key>IntegrityAlgorithm</key>
           <string>SHA2-256</string>
           <key>LifeTimeInMinutes</key>
@@ -1093,6 +1131,7 @@ export_client_config() {
   else
     install_uuidgen
   fi
+  update_ikev2_conf
   export_p12_file
   create_mobileconfig
   create_android_profile
@@ -1149,6 +1188,14 @@ EOF
 add_ikev2_connection() {
   bigecho2 "Adding a new IKEv2 connection..."
   XAUTH_POOL=${VPN_XAUTH_POOL:-'192.168.43.10-192.168.43.250'}
+  IP6_NET=${VPN_IP6_NET:-'fddd:500:500:500::/64'}
+  IP6_PREFIX=$(printf '%s' "$IP6_NET" | sed 's|/[0-9]*$||; s|::$||')
+  lsubnet="0.0.0.0/0"
+  rpool="$XAUTH_POOL"
+  if [ -n "$VPN_PUBLIC_IP6" ]; then
+    lsubnet="0.0.0.0/0,::/0"
+    rpool="$XAUTH_POOL,${IP6_PREFIX}::1000-${IP6_PREFIX}::1fff"
+  fi
   if ! grep -qs '^include /etc/ipsec\.d/\*\.conf$' "$IPSEC_CONF"; then
     echo >> "$IPSEC_CONF"
     echo 'include /etc/ipsec.d/*.conf' >> "$IPSEC_CONF"
@@ -1159,22 +1206,21 @@ conn ikev2-cp
   left=%defaultroute
   leftcert=$server_addr
   leftsendcert=always
-  leftsubnet=0.0.0.0/0
+  leftsubnet=$lsubnet
   leftrsasigkey=%cert
   right=%any
   rightid=%fromcert
-  rightaddresspool=$XAUTH_POOL
+  rightaddresspool=$rpool
   rightca=%same
   rightrsasigkey=%cert
   narrowing=yes
   dpddelay=30
   retransmit-timeout=300s
-  dpdaction=clear
   auto=add
   ikev2=insist
   rekey=no
   pfs=no
-  ike=aes256-sha2,aes128-sha2,aes256-sha1,aes128-sha1
+  ike=aes_gcm_c_256-hmac_sha2_256-ecp_256,aes256-sha2,aes128-sha2,aes256-sha1,aes128-sha1
   phase2alg=aes_gcm-null,aes128-sha1,aes256-sha1,aes128-sha2,aes256-sha2
   ikelifetime=24h
   salifetime=24h
@@ -1202,40 +1248,6 @@ EOF
     echo "  mobike=yes" >> "$IKEV2_CONF"
   else
     echo "  mobike=no" >> "$IKEV2_CONF"
-  fi
-}
-
-apply_ubuntu1804_nss_fix() {
-  os_arch=$(uname -m | tr -dc 'A-Za-z0-9_-')
-  if [ "$os_type" = "ubuntu" ] && [ "$os_ver" = "bustersid" ] && [ "$os_arch" = "x86_64" ] \
-    && ! dpkg -l libnss3-dev 2>/dev/null | grep -qF '3.49.1'; then
-    base_url="https://github.com/hwdsl2/vpn-extras/releases/download/v1.0.0"
-    nss_url1="https://mirrors.kernel.org/ubuntu/pool/main/n/nss"
-    nss_url2="https://mirrors.kernel.org/ubuntu/pool/universe/n/nss"
-    deb1="libnss3_3.49.1-1ubuntu1.9_amd64.deb"
-    deb2="libnss3-dev_3.49.1-1ubuntu1.9_amd64.deb"
-    deb3="libnss3-tools_3.49.1-1ubuntu1.9_amd64.deb"
-    bigecho2 "Applying fix for NSS bug on Ubuntu 18.04..."
-    mkdir -p /opt/src
-    cd /opt/src || exit 1
-    nss_dl=0
-    /bin/rm -f "$deb1" "$deb2" "$deb3"
-    export DEBIAN_FRONTEND=noninteractive
-    if wget -t 3 -T 30 -q "$base_url/$deb1" "$base_url/$deb2" "$base_url/$deb3"; then
-      apt-get -yqq update || apt-get -yqq update
-      apt-get -yqq install "./$deb1" "./$deb2" "./$deb3" >/dev/null
-    else
-      /bin/rm -f "$deb1" "$deb2" "$deb3"
-      if wget -t 3 -T 30 -q "$nss_url1/$deb1" "$nss_url1/$deb2" "$nss_url2/$deb3"; then
-        apt-get -yqq update || apt-get -yqq update
-        apt-get -yqq install "./$deb1" "./$deb2" "./$deb3" >/dev/null
-      else
-        nss_dl=1
-        echo "Error: Could not download NSS packages." >&2
-      fi
-    fi
-    /bin/rm -f "$deb1" "$deb2" "$deb3"
-    [ "$nss_dl" = 1 ] && exit 1
   fi
 }
 
@@ -1392,7 +1404,6 @@ Next steps: Configure IKEv2 clients. See:
 $config_url
 
 ================================================
-
 EOF
 }
 
@@ -1439,7 +1450,9 @@ WARNING: You have selected to revoke IKEv2 client certificate '$client_name'.
          to connect to this VPN server.
 
 EOF
-  confirm_or_abort "Are you sure you want to revoke '$client_name'? [y/N] "
+  if [ "$assume_yes" != 1 ]; then
+    confirm_or_abort "Are you sure you want to revoke '$client_name'? [y/N] "
+  fi
 }
 
 confirm_delete_cert() {
@@ -1450,7 +1463,9 @@ WARNING: Deleting a client certificate from the IPsec database *WILL NOT* preven
          This *cannot* be undone!
 
 EOF
-  confirm_or_abort "Are you sure you want to delete '$client_name'? [y/N] "
+  if [ "$assume_yes" != 1 ]; then
+    confirm_or_abort "Are you sure you want to delete '$client_name'? [y/N] "
+  fi
 }
 
 confirm_remove_ikev2() {
@@ -1461,7 +1476,9 @@ WARNING: This option will remove IKEv2 from this VPN server, but keep the IPsec/
          This *cannot* be undone!
 
 EOF
-  confirm_or_abort "Are you sure you want to remove IKEv2? [y/N] "
+  if [ "$assume_yes" != 1 ]; then
+    confirm_or_abort "Are you sure you want to remove IKEv2? [y/N] "
+  fi
 }
 
 delete_ikev2_conf() {
@@ -1499,12 +1516,14 @@ ikev2setup() {
   check_utils_exist
 
   use_defaults=0
+  assume_yes=0
   add_client=0
   export_client=0
   list_clients=0
   revoke_client=0
   delete_client=0
   remove_ikev2=0
+
   while [ "$#" -gt 0 ]; do
     case $1 in
       --auto)
@@ -1541,6 +1560,10 @@ ikev2setup() {
         ;;
       --removeikev2)
         remove_ikev2=1
+        shift
+        ;;
+      -y|--yes)
+        assume_yes=1
         shift
         ;;
       -h|--help)
@@ -1720,7 +1743,6 @@ ikev2setup() {
     mobike_enable="$mobike_support"
   fi
 
-  apply_ubuntu1804_nss_fix
   create_ca_server_certs
   create_client_cert
   export_client_config
